@@ -1,0 +1,1147 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, interactive-widget=resizes-visual">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Flip 7">
+<meta name="theme-color" content="#0f0e17">
+<meta name="description" content="Flip 7 Score Tracker">
+
+<!-- PWA Manifest (als Inline-Data-URI – keine separate Datei nötig) -->
+<link rel="manifest" href="data:application/manifest+json,{
+  %22name%22:%22Flip%207%20Score%20Tracker%22,
+  %22short_name%22:%22Flip%207%22,
+  %22start_url%22:%22.%22,
+  %22display%22:%22standalone%22,
+  %22background_color%22:%22%230f0e17%22,
+  %22theme_color%22:%22%230f0e17%22,
+  %22orientation%22:%22portrait%22,
+  %22icons%22:[
+    {%22src%22:%22data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20512%20512'%3E%3Crect%20width%3D'512'%20height%3D'512'%20rx%3D'100'%20fill%3D'%230f0e17'%2F%3E%3Ctext%20x%3D'256'%20y%3D'310'%20text-anchor%3D'middle'%20font-family%3D'Arial%20Black%2Csans-serif'%20font-size%3D'260'%20font-weight%3D'900'%3E%3Ctspan%20fill%3D'%23fffffe'%3EF%3C%2Ftspan%3E%3Ctspan%20fill%3D'%23ff6b35'%3E7%3C%2Ftspan%3E%3C%2Ftext%3E%3C%2Fsvg%3E%22,%22sizes%22:%22512x512%22,%22type%22:%22image/svg+xml%22,%22purpose%22:%22any%20maskable%22}
+  ]
+}">
+
+<!-- iOS Home Screen Icon (SVG als Data-URI) -->
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='100' fill='%230f0e17'/><text x='256' y='310' text-anchor='middle' font-family='Arial Black,sans-serif' font-size='260' font-weight='900'><tspan fill='%23fffffe'>F</tspan><tspan fill='%23ff6b35'>7</tspan></text></svg>">
+<title>Flip 7 · Score v28</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f0e17;
+    --surface: #1a1928;
+    --border: #2a2940;
+    --accent: #ff6b35;
+    --text: #fffffe;
+    --muted: #7e7d9a;
+    --radius: 18px;
+    --topbar: 52px;
+    --inputbar: 68px;
+    /* The whole game UI lives in 50vh → keyboard takes the other 50% */
+    --app-height: 57vh;
+    --pie-height: calc(var(--app-height) - var(--topbar) - var(--inputbar));
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    overflow: hidden;
+  }
+
+  /* ===== SETUP ===== */
+  #setup {
+    position: fixed; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 2rem; overflow-y: auto;
+    z-index: 10; background: var(--bg);
+  }
+  .logo { font-size: 3rem; font-weight: 800; letter-spacing: -2px; line-height: 1; margin-bottom: 0.3rem; }
+  .logo span { color: var(--accent); }
+  .tagline { color: var(--muted); font-size: 0.85rem; letter-spacing: 3px; text-transform: uppercase; margin-bottom: 2.5rem; font-family: 'DM Mono', monospace; }
+  .setup-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.8rem; width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 1.4rem; }
+  .setup-card h2 { font-size: 0.85rem; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); }
+  .player-count-row { display: flex; align-items: center; gap: 1rem; justify-content: center; }
+  .count-btn { width: 48px; height: 48px; border-radius: 12px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 1.4rem; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.12s; }
+  .count-btn:active { background: var(--accent); border-color: var(--accent); transform: scale(0.93); }
+  #playerCount { font-size: 2.5rem; font-weight: 800; min-width: 60px; text-align: center; }
+  .names-list { display: flex; flex-direction: column; gap: 0.7rem; }
+  .name-row { display: flex; gap: 0.4rem; align-items: center; transition: box-shadow 0.1s; }
+  /* Visueller Linie-Indikator beim Drag-over */
+  .name-row.drop-before { box-shadow: 0 -2px 0 0 var(--accent); }
+  .name-row.drop-after  { box-shadow: 0  2px 0 0 var(--accent); }
+  /* Angegriffene Zeile leicht ausblenden während des Ziehens */
+  .name-row.is-dragging { opacity: 0.45; }
+
+  /* Anfass-Handle zum Sortieren der Spielerreihenfolge */
+  .drag-handle {
+    width: 26px; height: 34px;
+    border-radius: 8px; border: 1px solid var(--border);
+    background: var(--bg); color: var(--muted);
+    cursor: grab; display: flex; align-items: center; justify-content: center;
+    font-size: 0.9rem; flex-shrink: 0;
+    touch-action: none;          /* verhindert Scroll-Konflikt auf Touch */
+    user-select: none; -webkit-user-select: none;
+    transition: border-color 0.12s, color 0.12s;
+  }
+  .drag-handle:active { cursor: grabbing; border-color: var(--accent); color: var(--text); }
+  .name-input { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-family: 'Syne', sans-serif; font-size: 0.85rem; font-weight: 700; padding: 0.5rem 0.6rem; flex: 1; min-width: 0; max-width: 140px; outline: none; transition: border-color 0.2s; }
+  .color-swatch { width: 34px; height: 34px; border-radius: 8px; border: 2px solid var(--border); cursor: pointer; flex-shrink: 0; transition: transform 0.12s; }
+  .color-swatch:active { transform: scale(0.9); }
+  .color-picker-hidden { position: absolute; width: 0; height: 0; opacity: 0; pointer-events: none; }
+  .medal-badge {
+    display: flex; align-items: center; gap: 2px;
+    font-size: 0.72rem; flex-shrink: 0; min-width: 18px;
+    font-family: 'DM Mono', monospace;
+  }
+  /* Jede einzelne Medaille + Zahl in einem eigenen Rahmen-Pill */
+  .medal-chip {
+    display: inline-flex; align-items: center; gap: 1px;
+    border: 1px solid var(--border); border-radius: 5px;
+    padding: 1px 3px; line-height: 1;
+  }
+  .medal-count { font-size: 0.58rem; color: var(--muted); }
+  .name-input:focus { border-color: var(--accent); }
+  .name-input::placeholder { color: var(--muted); font-weight: 400; }
+  .mode-row { display: flex; align-items: center; gap: 0.75rem; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 0.75rem 1rem; cursor: pointer; user-select: none; }
+  .mode-row input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; flex-shrink: 0; }
+  .mode-label { flex: 1; }
+  .mode-label strong { display: block; font-size: 0.95rem; font-weight: 700; }
+  .mode-label span { font-size: 0.75rem; color: var(--muted); font-family: 'DM Mono', monospace; }
+  .start-btn { background: var(--accent); color: #fff; border: none; border-radius: 14px; font-family: 'Syne', sans-serif; font-size: 1.1rem; font-weight: 800; padding: 1rem; cursor: pointer; letter-spacing: 1px; transition: all 0.12s; }
+  .start-btn:active { opacity: 0.88; transform: scale(0.97); }
+
+  /* ===== GAME — occupies exactly top 50vh ===== */
+  #game {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: var(--app-height);   /* ← pinned to 50vh, keyboard won't touch this */
+    flex-direction: column;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .top-bar {
+    flex-shrink: 0;
+    height: var(--topbar);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 1rem;
+    border-bottom: 1px solid var(--border);
+    position: relative; /* needed so #game-clock can be centered with absolute */
+  }
+
+  /* Live-Uhrzeit in der Mitte der Game-Top-Bar */
+  #game-clock {
+    position: absolute; left: 50%; transform: translateX(-50%);
+    font-family: 'DM Mono', monospace; font-size: 0.72rem;
+    color: var(--muted); letter-spacing: 2px; pointer-events: none;
+  }
+  .game-title { font-size: 1.05rem; font-weight: 800; }
+  .game-title span { color: var(--accent); }
+  .bar-actions { display: flex; gap: 0.5rem; }
+  .icon-btn { width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 1rem; transition: all 0.12s; }
+  .icon-btn:active { background: var(--accent); border-color: var(--accent); transform: scale(0.9); }
+
+  /* Pie area */
+  #pie-wrap {
+    flex: 1;
+    display: flex; align-items: center; justify-content: center;
+    padding: 6px;
+    min-height: 0;   /* allow flex shrink */
+    overflow: hidden;
+  }
+  #pie-svg {
+    touch-action: manipulation;
+    overflow: visible;
+    /* size set by JS */
+  }
+
+  /* Input bar */
+  #input-bar {
+    flex-shrink: 0;
+    height: var(--inputbar);
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    display: flex; align-items: center;
+    padding: 0 0.75rem;
+    gap: 0.6rem;
+  }
+
+  #active-chip {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-width: 52px; max-width: 64px;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+    padding: 0.25rem 0.45rem; gap: 1px; height: 44px; cursor: pointer;
+    transition: border-color 0.15s; flex-shrink: 0;
+  }
+  #chip-name { font-size: 0.55rem; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60px; }
+  #chip-score { font-family: 'DM Mono', monospace; font-size: 1.05rem; font-weight: 500; line-height: 1; }
+
+  #no-player-hint { flex: 1; text-align: center; color: var(--muted); font-size: 0.78rem; letter-spacing: 1px; font-family: 'DM Mono', monospace; }
+
+  #delta-input {
+    flex: 1; min-width: 0;
+    background: var(--bg);
+    border: 2px solid var(--border); border-radius: 10px;
+    color: var(--text);
+    font-family: 'DM Mono', monospace; font-size: 1.25rem; font-weight: 500;
+    padding: 0 0.75rem; height: 44px;
+    text-align: center; outline: none;
+    transition: border-color 0.15s;
+  }
+  #delta-input:focus { border-color: var(--accent); }
+
+  #sub-btn {
+    height: 44px; flex-shrink: 0;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    color: var(--text); font-family: 'Syne', sans-serif;
+    font-size: 0.85rem; font-weight: 800;
+    padding: 0 0.75rem; cursor: pointer; white-space: nowrap;
+    letter-spacing: 0.5px; transition: all 0.12s;
+  }
+  #sub-btn.confirm { background: #e84040; border-color: #e84040; color: #fff; }
+  #add-btn {
+    height: 44px; flex-shrink: 0;
+    background: var(--accent); border: none; border-radius: 10px;
+    color: #fff; font-family: 'Syne', sans-serif;
+    font-size: 0.85rem; font-weight: 800;
+    padding: 0 0.9rem; cursor: pointer; white-space: nowrap;
+    letter-spacing: 0.5px; transition: opacity 0.12s, transform 0.12s;
+  }
+  #add-btn:active { opacity: 0.85; transform: scale(0.96); }
+
+
+
+  /* ===== HISTORY PANEL ===== */
+  #history-panel {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: var(--surface); border-top: 1px solid var(--border);
+    border-radius: 20px 20px 0 0; max-height: 65vh; overflow-y: auto;
+    transform: translateY(100%);
+    transition: transform 0.28s cubic-bezier(0.32,0.72,0,1);
+    z-index: 200; padding: 1rem;
+  }
+  #history-panel.open { transform: translateY(0); }
+  .panel-handle { width: 40px; height: 4px; background: var(--border); border-radius: 2px; margin: 0 auto 1rem; }
+  .panel-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
+  .panel-header h3 { font-size: 0.8rem; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); }
+  .undo-btn { background: transparent; border: 1px solid var(--border); border-radius: 8px; color: var(--accent); font-family: 'Syne', sans-serif; font-size: 0.75rem; font-weight: 700; padding: 0.35rem 0.8rem; cursor: pointer; }
+  .undo-btn:disabled { opacity: 0.3; cursor: default; }
+  .history-list { display: flex; flex-direction: column; gap: 0.5rem; }
+  .history-item { display: flex; align-items: center; justify-content: space-between; padding: 0.65rem 0.9rem; background: var(--bg); border-radius: 10px; }
+  .hist-player { font-weight: 700; font-size: 0.78rem; letter-spacing: 1px; text-transform: uppercase; }
+  .hist-round { font-size: 0.62rem; color: var(--muted); font-family: 'DM Mono', monospace; }
+  .hist-delta { font-family: 'DM Mono', monospace; font-size: 0.85rem; color: #4ecdc4; }
+  .hist-delta.neg { color: #ff6b6b; }
+  .empty-history { text-align: center; color: var(--muted); font-size: 0.85rem; padding: 2rem; font-family: 'DM Mono', monospace; }
+
+  #overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 150; display: none; backdrop-filter: blur(2px); }
+  #overlay.active { display: block; }
+
+  #reset-modal { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; z-index: 300; padding: 1.5rem; }
+  #reset-modal.open { display: flex; }
+  .modal-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 2rem; max-width: 300px; width: 100%; text-align: center; display: flex; flex-direction: column; gap: 1.2rem; }
+  .modal-card h3 { font-size: 1.2rem; font-weight: 800; }
+  .modal-card p { color: var(--muted); font-size: 0.9rem; }
+  .modal-actions { display: flex; gap: 0.75rem; }
+  .modal-actions button { flex: 1; padding: 0.85rem; border-radius: 12px; border: none; font-family: 'Syne', sans-serif; font-size: 0.9rem; font-weight: 800; cursor: pointer; }
+  .btn-cancel { background: var(--bg); color: var(--text); border: 1px solid var(--border) !important; }
+  .btn-confirm { background: var(--accent); color: white; }
+
+  /* ===== SIEGEREHRUNG-MODAL ===== */
+  #sieger-modal { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; z-index: 300; padding: 1.5rem; }
+  #sieger-modal.open { display: flex; }
+  .sieger-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 2rem 1.5rem 1.5rem;
+    max-width: 340px; width: 100%; text-align: center;
+    display: flex; flex-direction: column; gap: 1.4rem;
+  }
+  .sieger-title { font-size: 1.3rem; font-weight: 800; letter-spacing: -0.5px; }
+  /* Podium: drei Spalten, mittlere (Gold) ist erhöht */
+  .podium-wrap {
+    display: flex; align-items: flex-end; justify-content: center;
+    gap: 0.5rem; height: 120px;
+  }
+  .podium-slot {
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: flex-end; gap: 4px; flex: 1;
+  }
+  .podium-name {
+    font-size: 0.72rem; font-weight: 800; letter-spacing: 0.5px;
+    text-transform: uppercase; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis; max-width: 90px;
+  }
+  .podium-score {
+    font-family: 'DM Mono', monospace; font-size: 0.65rem; color: var(--muted);
+  }
+  .podium-medal { font-size: 1.8rem; line-height: 1; }
+  .podium-block {
+    width: 100%; border-radius: 8px 8px 0 0;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'DM Mono', monospace; font-size: 0.75rem; font-weight: 700;
+    color: rgba(0,0,0,0.5); padding-top: 4px;
+  }
+  .podium-block.gold   { background: #f7c948; height: 70px; }
+  .podium-block.silver { background: #b8c0cc; height: 50px; }
+  .podium-block.bronze { background: #cd7f32; height: 36px; }
+  /* Reihenfolge: Silber links, Gold mitte, Bronze rechts */
+  .podium-wrap .slot-silver { order: 1; }
+  .podium-wrap .slot-gold   { order: 2; }
+  .podium-wrap .slot-bronze { order: 3; }
+
+  .sieger-modal-actions { display: flex; gap: 0.75rem; }
+  .sieger-modal-actions button { flex: 1; padding: 0.85rem; border-radius: 12px; border: none; font-family: 'Syne', sans-serif; font-size: 0.9rem; font-weight: 800; cursor: pointer; }
+
+  .toast { position: fixed; top: calc(var(--topbar) + 6px); left: 50%; transform: translateX(-50%) translateY(-6px); background: var(--surface); border: 1px solid var(--border); border-radius: 100px; color: var(--text); font-size: 0.78rem; font-weight: 700; padding: 0.5rem 1rem; opacity: 0; transition: all 0.22s; z-index: 500; white-space: nowrap; }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  #confetti-canvas { position: fixed; inset: 0; pointer-events: none; z-index: 999; }
+</style>
+</head>
+<body>
+
+<!-- SETUP -->
+<div id="setup">
+  <div class="logo">FLIP<span>7</span></div>
+  <div class="tagline">Score Tracker</div>
+  <div class="setup-card">
+    <h2>Anzahl Spieler</h2>
+    <div class="player-count-row">
+      <button class="count-btn" id="decBtn">−</button>
+      <div id="playerCount">3</div>
+      <button class="count-btn" id="incBtn">+</button>
+    </div>
+    <h2>Namen</h2>
+    <div class="names-list" id="namesList"></div>
+    <div class="mode-row" onclick="toggleSchnell()">
+      <input type="checkbox" id="schnellrunde" onclick="event.stopPropagation();toggleSchnell()">
+      <div class="mode-label">
+        <strong>⚡ Punkteziel</strong>
+        <span>Standard: 200 Punkte</span>
+      </div>
+      <input type="number" id="zielpunkte" inputmode="numeric" placeholder="200"
+        style="display:none;width:72px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'DM Mono',monospace;font-size:1rem;font-weight:700;padding:0.4rem 0.5rem;text-align:center;outline:none;flex-shrink:0;"
+        onclick="event.stopPropagation()" min="1" max="99999">
+    </div>
+    <button class="start-btn" id="startBtn">SPIEL STARTEN →</button>
+  </div>
+</div>
+
+<!-- GAME -->
+<div id="game">
+  <div class="top-bar">
+    <div class="game-title" id="back-to-setup" style="cursor:pointer" title="Zurück zur Namenseingabe">FLIP<span>7</span> <small id="mode-badge" style="display:none;font-size:0.6rem;color:var(--accent);letter-spacing:1px;vertical-align:middle;">⚡SCHNELL</small></div>
+    <div id="game-clock">00:00</div>
+    <div class="bar-actions">
+      <button class="icon-btn" id="siegerBtn" title="Siegerehrung">🏅</button>
+      <button class="icon-btn" id="historyBtn">📋</button>
+      <button class="icon-btn" id="resetBtn">🔄</button>
+    </div>
+  </div>
+
+  <div id="pie-wrap">
+    <svg id="pie-svg" viewBox="0 0 400 400"></svg>
+  </div>
+
+  <div id="input-bar">
+    <div id="active-chip">
+      <div id="chip-name">—</div>
+      <div id="chip-score" style="color:var(--muted)">—</div>
+    </div>
+    <span id="no-player-hint">← Spieler antippen</span>
+    <input id="delta-input" type="number" inputmode="numeric" placeholder="0" style="display:none">
+    <button id="add-btn" style="display:none">＋ ADD</button>
+    <button id="sub-btn" style="display:none">− SUB</button>
+  </div>
+</div>
+
+<!-- Panels / modals -->
+<div id="overlay"></div>
+<div id="history-panel">
+  <div class="panel-handle"></div>
+  <div class="panel-header">
+    <h3>Rundenhistorie</h3>
+    <button class="undo-btn" id="undoBtn">↩ Rückgängig</button>
+  </div>
+  <div class="history-list" id="historyList"></div>
+</div>
+
+<div id="sieger-modal">
+  <div class="sieger-card">
+    <div class="sieger-title">🏅 Siegerehrung</div>
+    <div class="podium-wrap" id="podium-wrap"></div>
+    <div class="sieger-modal-actions">
+      <button class="btn-cancel" id="siegerClose">Schließen</button>
+    </div>
+  </div>
+</div>
+
+<div id="reset-modal">
+  <div class="modal-card">
+    <h3>Alles zurücksetzen?</h3>
+    <p>Alle Punkte werden auf 0 gesetzt.</p>
+    <div class="modal-actions">
+      <button class="btn-cancel" id="cancelReset">Abbrechen</button>
+      <button class="btn-confirm" id="confirmReset">Zurücksetzen</button>
+    </div>
+  </div>
+</div>
+
+<canvas id="confetti-canvas"></canvas>
+<div class="toast" id="toast"></div>
+
+<script>
+const COLORS = ['#e8734a','#4dbfb8','#e8c04a','#9b7fe8','#e8708a','#4db88a','#6aaee8','#e8924a','#a0c878','#e87878','#78aee8','#c8a0e8','#78c8b8','#e8b878','#98b8e8','#c8e878'];
+const CONFETTI_AT = () => state.ziel || 200;
+const CX=200, CY=200, R_OUT=188, R_IN=60;
+
+let state = { players: [], history: [] };
+let startPlayerIdx = 0;
+let activeIdx = null;
+const confettiFired = new Set();
+
+// ── Name normalization for win counter ───────────────────
+const NAME_ALIASES = [
+  ['chris', 'christian'],
+  // add more groups here as needed
+];
+function normalizeName(name) {
+  const n = name.trim().toLowerCase();
+  for (const group of NAME_ALIASES) {
+    if (group.includes(n)) return group[0]; // canonical = first in group
+  }
+  return n;
+}
+
+// ── Medaillen-System ─────────────────────────────────────
+// Speichert Gold/Silber/Bronze pro Spielername in localStorage.
+// Format: flip7_medals_<normalizedName> = JSON {gold,silver,bronze}
+function getMedals(nameKey) {
+  try { return JSON.parse(localStorage.getItem(`flip7_medals_${nameKey}`)) || {gold:0,silver:0,bronze:0}; }
+  catch { return {gold:0,silver:0,bronze:0}; }
+}
+function addMedal(name, type) {
+  const nk = normalizeName(name);
+  const m = getMedals(nk);
+  m[type] = (m[type] || 0) + 1;
+  localStorage.setItem(`flip7_medals_${nk}`, JSON.stringify(m));
+}
+
+// Öffnet das Siegerehrung-Modal: vergibt Medaillen an Top-3 und zeigt Podium
+function openSiegerehrung() {
+  if (!state.players.length) return;
+  // Spieler nach Score sortieren (absteigend), Original-Index merken
+  const ranked = state.players
+    .map((p, i) => ({ ...p, origIdx: i }))
+    .sort((a, b) => b.score - a.score);
+
+  const medals = ['gold', 'silver', 'bronze'];
+  const awarded = [];
+  // Bei Gleichstand gleiche Medaille, aber max. 3 verschiedene Ränge
+  let lastScore = null, rank = -1;
+  ranked.forEach((p, i) => {
+    if (p.score !== lastScore) { rank++; lastScore = p.score; }
+    if (rank < 3) {
+      addMedal(p.name, medals[rank]);
+      awarded.push({ ...p, medal: medals[rank], rank });
+    }
+  });
+
+  // Podium rendern: Silber links (order:1), Gold Mitte (order:2), Bronze rechts (order:3)
+  const wrap = document.getElementById('podium-wrap');
+  wrap.innerHTML = '';
+  const medalEmoji = { gold: '🥇', silver: '🥈', bronze: '🥉' };
+  const medalLabel = { gold: '1.', silver: '2.', bronze: '3.' };
+
+  // Sicherstellen dass auch bei <3 Spielern kein Crash passiert
+  ['silver','gold','bronze'].forEach(type => {
+    const p = awarded.find(a => a.medal === type);
+    if (!p) return;
+    const slot = document.createElement('div');
+    slot.className = `podium-slot slot-${type}`;
+    slot.innerHTML = `
+      <div class="podium-name" style="color:${p.color}">${esc(p.name)}</div>
+      <div class="podium-score">${p.score} Pkt</div>
+      <div class="podium-medal">${medalEmoji[type]}</div>
+      <div class="podium-block ${type}">${medalLabel[type]}</div>`;
+    wrap.appendChild(slot);
+  });
+
+  overlay.classList.add('active');
+  document.getElementById('sieger-modal').classList.add('open');
+  // Konfetti in der Siegerfarbe
+  const winner = awarded.find(a => a.medal === 'gold');
+  if (winner) launchConfetti(winner.color);
+
+  // Setup-Badges aktualisieren (damit beim nächsten Öffnen die neuen Medaillen sichtbar sind)
+  renderNameInputs();
+}
+
+
+function toggleSchnell() {
+  const cb = document.getElementById('schnellrunde');
+  const inp = document.getElementById('zielpunkte');
+  const label = document.querySelector('.mode-label span');
+  if (cb.checked) {
+    inp.style.display = 'block';
+    inp.focus();
+    inp.select();
+    label.textContent = 'Eigenes Punkteziel:';
+  } else {
+    inp.style.display = 'none';
+    label.textContent = 'Standard: 200 Punkte';
+  }
+}
+
+// ── Setup ──────────────────────────────────────────────
+let numPlayers = 3;
+const playerCountEl = document.getElementById('playerCount');
+const namesListEl   = document.getElementById('namesList');
+
+function renderNameInputs() {
+  namesListEl.innerHTML = '';
+  for (let i = 0; i < numPlayers; i++) {
+    const row = document.createElement('div');
+    row.className = 'name-row';
+
+    // ── Drag-Handle (Griff zum Sortieren der Spielerreihenfolge) ──
+    const handle = document.createElement('button');
+    handle.className = 'drag-handle';
+    handle.title = 'Reihenfolge ändern';
+    handle.textContent = '⠿';
+    row.appendChild(handle);
+
+    const inp = document.createElement('input');
+    inp.className = 'name-input';
+    inp.placeholder = `Spieler ${i+1}`;
+    inp.maxLength = 12;
+    const saved = localStorage.getItem(`flip7_player_${i}`);
+    if (saved) inp.value = saved;
+
+    // Color swatch
+    // Priorität: 1) zuletzt verwendete Farbe für diesen Namen, 2) zuletzt für diesen Slot, 3) Default
+    const savedName = localStorage.getItem(`flip7_player_${i}`);
+    const nameKey = savedName ? normalizeName(savedName.trim()) : null;
+    const savedColorByName = nameKey ? localStorage.getItem(`flip7_color_name_${nameKey}`) : null;
+    const savedColorBySlot = localStorage.getItem(`flip7_color_${i}`);
+    const defaultColor = COLORS[i % COLORS.length];
+    const currentColor = savedColorByName || savedColorBySlot || defaultColor;
+
+    const swatch = document.createElement('div');
+    swatch.className = 'color-swatch';
+    swatch.style.background = currentColor;
+    swatch.dataset.idx = i;
+
+    const picker = document.createElement('input');
+    picker.type = 'color';
+    picker.className = 'color-picker-hidden';
+    picker.value = currentColor;
+    // Suggested colors datalist
+    const listId = `color-list-${i}`;
+    const datalist = document.createElement('datalist');
+    datalist.id = listId;
+    const suggestions = ['#e8734a','#4dbfb8','#e8c04a','#9b7fe8','#e8708a','#4db88a','#6aaee8','#e8924a','#a0c878','#e87878','#78aee8','#c8a0e8','#78c8b8','#e8b878','#98b8e8','#c8e878'];
+    suggestions.forEach(col => { const opt = document.createElement('option'); opt.value = col; datalist.appendChild(opt); });
+    picker.setAttribute('list', listId);
+    row.appendChild(datalist);
+    picker.addEventListener('input', () => {
+      swatch.style.background = picker.value;
+    });
+    swatch.addEventListener('click', () => picker.click());
+
+    // Medal badge: zeigt gesammelte 🥇🥈🥉 für diesen Spielernamen
+    const medalBadge = document.createElement('div');
+    medalBadge.className = 'medal-badge';
+    const updateMedalBadge = () => {
+      const nk = normalizeName(inp.value.trim()) || `p${i}`;
+      const m = getMedals(nk);
+      let html = '';
+      if (m.gold)   html += `<span class="medal-chip">🥇<span class="medal-count">${m.gold > 1 ? m.gold : ''}</span></span>`;
+      if (m.silver) html += `<span class="medal-chip">🥈<span class="medal-count">${m.silver > 1 ? m.silver : ''}</span></span>`;
+      if (m.bronze) html += `<span class="medal-chip">🥉<span class="medal-count">${m.bronze > 1 ? m.bronze : ''}</span></span>`;
+      medalBadge.innerHTML = html || '<span style="color:var(--border);font-size:0.6rem">—</span>';
+    };
+    updateMedalBadge();
+    inp.addEventListener('input', () => {
+      updateMedalBadge();
+      // Wenn für diesen Namen eine gespeicherte Farbe existiert, automatisch setzen
+      const nk = normalizeName(inp.value.trim());
+      if (nk) {
+        const rememberedColor = localStorage.getItem(`flip7_color_name_${nk}`);
+        if (rememberedColor) { picker.value = rememberedColor; swatch.style.background = rememberedColor; }
+      }
+      if (/^die rote$/i.test(inp.value.trim())) {
+        picker.value = '#ff0000'; swatch.style.background = '#ff0000';
+      }
+    });
+    picker.addEventListener('input', updateMedalBadge);
+
+    row.appendChild(inp);
+    row.appendChild(medalBadge);
+    row.appendChild(swatch);
+    row.appendChild(picker);
+    enableDrag(handle, row, namesListEl); // Drag-and-Drop für diese Zeile aktivieren
+    namesListEl.appendChild(row);
+  }
+}
+// Restore last player count
+const savedCount = localStorage.getItem('flip7_player_count');
+if (savedCount) { numPlayers = parseInt(savedCount); playerCountEl.textContent = numPlayers; }
+renderNameInputs();
+
+document.getElementById('decBtn').onclick = () => { if (numPlayers>2){numPlayers--;playerCountEl.textContent=numPlayers;renderNameInputs();}};
+document.getElementById('incBtn').onclick = () => { if (numPlayers<18){numPlayers++;playerCountEl.textContent=numPlayers;renderNameInputs();}};
+
+document.getElementById('startBtn').onclick = () => {
+  const rows = namesListEl.querySelectorAll('.name-row');
+  state.players = Array.from(rows).map((row,i) => {
+    const inp    = row.querySelector('.name-input');
+    const picker = row.querySelector('input[type=color]');
+    const name = inp.value.trim() || `P${i+1}`;
+    if (/^die rote$/i.test(name)) { picker.value = '#ff0000'; const sw = row.querySelector('.color-swatch'); if(sw) sw.style.background='#ff0000'; }
+    const color  = picker ? picker.value : COLORS[i % COLORS.length];
+    localStorage.setItem(`flip7_player_${i}`, inp.value.trim());
+    localStorage.setItem(`flip7_color_${i}`, color);
+    localStorage.setItem(`flip7_color_name_${normalizeName(name)}`, color); // Farbe per Name merken
+    return { name, score: 0, color };
+  });
+  // Also save the player count
+  localStorage.setItem('flip7_player_count', numPlayers);
+  const cb = document.getElementById('schnellrunde');
+  const zielVal = parseInt(document.getElementById('zielpunkte').value, 10);
+  state.schnell = cb.checked;
+  state.ziel = (cb.checked && !isNaN(zielVal) && zielVal > 0) ? zielVal : 200;
+  state.history = [];
+  confettiFired.clear();
+  document.getElementById('setup').style.display = 'none';
+  document.getElementById('game').style.display = 'flex';
+  const badge = document.getElementById('mode-badge');
+  if (state.schnell) {
+    badge.style.display = 'inline';
+    badge.textContent = `⚡${state.ziel}P`;
+  } else {
+    badge.style.display = 'none';
+  }
+  sizePie();
+  renderPie();
+  startClock(); // Uhrzeit-Anzeige starten
+};
+
+// ── Pie sizing ─────────────────────────────────────────
+function sizePie() {
+  const wrap = document.getElementById('pie-wrap');
+  const svgEl = document.getElementById('pie-svg');
+  const w = wrap.clientWidth  - 12;
+  const h = wrap.clientHeight - 12;
+  const sz = Math.min(w, h, 420);
+  svgEl.style.width  = sz + 'px';
+  svgEl.style.height = sz + 'px';
+}
+window.addEventListener('resize', () => { sizePie(); renderPie(); });
+
+// ── Back to setup ──────────────────────────────────────────
+document.getElementById('back-to-setup').addEventListener('click', () => {
+  document.getElementById('game').style.display = 'none';
+  document.getElementById('setup').style.display = 'flex';
+  activeIdx = null;
+  stopClock(); // Uhrzeit-Interval stoppen
+  // hide input bar elements
+  document.getElementById('no-player-hint').style.display = 'block';
+  document.getElementById('delta-input').style.display = 'none';
+  document.getElementById('add-btn').style.display = 'none';
+  document.getElementById('sub-btn').style.display = 'none';
+});
+
+// ── Drag-and-Drop Sortierung (Setup-Namensliste) ───────────
+// Pointer-Events statt HTML5-Drag, damit es auf Android-Touch zuverlässig funktioniert.
+// Das gezogene Element wird per translateY verschoben; eine farbige Linie
+// (box-shadow via CSS-Klasse drop-before/drop-after) zeigt die Zielposition an.
+function enableDrag(handle, row, listEl) {
+  handle.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    handle.setPointerCapture(e.pointerId); // Pointer-Capture hält Events auch außerhalb des Elements
+
+    const startY = e.clientY;
+    row.classList.add('is-dragging');
+
+    function onMove(e) {
+      row.style.transform = `translateY(${e.clientY - startY}px)`;
+      row.style.position  = 'relative';
+      row.style.zIndex    = '50';
+
+      // Drop-Indikator aktualisieren
+      const allRows = Array.from(listEl.querySelectorAll('.name-row'));
+      allRows.forEach(r => r.classList.remove('drop-before', 'drop-after'));
+      for (const r of allRows) {
+        if (r === row) continue;
+        const rect = r.getBoundingClientRect();
+        if (e.clientY >= rect.top - 6 && e.clientY <= rect.bottom + 6) {
+          r.classList.add(e.clientY < rect.top + rect.height / 2 ? 'drop-before' : 'drop-after');
+          break;
+        }
+      }
+    }
+
+    function onUp(e) {
+      handle.removeEventListener('pointermove', onMove);
+      handle.removeEventListener('pointerup',   onUp);
+      handle.removeEventListener('pointercancel', onUp);
+
+      // Visuellen Zustand zurücksetzen
+      row.classList.remove('is-dragging');
+      row.style.transform = '';
+      row.style.position  = '';
+      row.style.zIndex    = '';
+
+      // Zielposition ermitteln und Zeile im DOM verschieben
+      const allRows = Array.from(listEl.querySelectorAll('.name-row'));
+      let dropTarget = null, insertBefore = true;
+      for (const r of allRows) {
+        if (r.classList.contains('drop-before')) { dropTarget = r; insertBefore = true;  break; }
+        if (r.classList.contains('drop-after'))  { dropTarget = r; insertBefore = false; break; }
+      }
+      allRows.forEach(r => r.classList.remove('drop-before', 'drop-after'));
+
+      if (dropTarget && dropTarget !== row) {
+        listEl.insertBefore(row, insertBefore ? dropTarget : dropTarget.nextSibling);
+      }
+    }
+
+    handle.addEventListener('pointermove',  onMove);
+    handle.addEventListener('pointerup',    onUp);
+    handle.addEventListener('pointercancel', onUp);
+  });
+}
+
+// ── Uhrzeit im Game-Screen ─────────────────────────────
+// Aktualisiert das #game-clock Element und gibt das Intervall zurück.
+let clockInterval = null;
+function updateClock() {
+  const now = new Date();
+  const hh  = String(now.getHours()).padStart(2, '0');
+  const mm  = String(now.getMinutes()).padStart(2, '0');
+  document.getElementById('game-clock').textContent = `${hh}:${mm}`;
+}
+function startClock() {
+  updateClock();
+  clockInterval = setInterval(updateClock, 10_000); // alle 10 s reicht für HH:MM
+}
+function stopClock() {
+  clearInterval(clockInterval);
+  clockInterval = null;
+}
+
+
+function svgEl(tag, attrs={}) {
+  const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+  for (const [k,v] of Object.entries(attrs)) el.setAttribute(k,v);
+  return el;
+}
+function polar(deg,r) {
+  const rad = (deg-90)*Math.PI/180;
+  return { x: CX+r*Math.cos(rad), y: CY+r*Math.sin(rad) };
+}
+function arc(s, e, rOuter, rInner) {
+  // Gap in pixels (not degrees) so spacing looks equal at all radii
+  const GAP_PX = 2.5;
+  const gOuter = (GAP_PX / rOuter) * (180 / Math.PI);
+  const gInner = (GAP_PX / rInner) * (180 / Math.PI);
+  const a1=s+gOuter/2, b1=e-gOuter/2; // outer arc angles
+  const a2=s+gInner/2, b2=e-gInner/2; // inner arc angles
+  const lg = b1-a1 > 180 ? 1 : 0;
+  const o1=polar(a1,rOuter),o2=polar(b1,rOuter);
+  const i1=polar(b2,rInner),i2=polar(a2,rInner);
+  return `M${o1.x} ${o1.y} A${rOuter} ${rOuter} 0 ${lg} 1 ${o2.x} ${o2.y} L${i1.x} ${i1.y} A${rInner} ${rInner} 0 ${lg} 0 ${i2.x} ${i2.y}Z`;
+}
+const MAX_SCORE = () => state.ziel || 200;
+
+// ── Render Pie ─────────────────────────────────────────
+const svg = document.getElementById('pie-svg');
+
+function renderPie() {
+  svg.innerHTML = '';
+  const n = state.players.length;
+  const deg = 360/n;
+  const maxScore = Math.max(...state.players.map(p=>p.score));
+  const hasWinner = maxScore > 0;
+
+  const defs = svgEl('defs');
+  const f = svgEl('filter',{id:'glow',x:'-25%',y:'-25%',width:'150%',height:'150%'});
+  const blur = svgEl('feGaussianBlur',{in:'SourceGraphic',stdDeviation:'5',result:'b'});
+  const merge = svgEl('feMerge');
+  merge.appendChild(svgEl('feMergeNode',{in:'b'}));
+  merge.appendChild(svgEl('feMergeNode',{in:'SourceGraphic'}));
+  f.appendChild(blur); f.appendChild(merge); defs.appendChild(f);
+  svg.appendChild(defs);
+
+  state.players.forEach((p,i) => {
+    const s=i*deg, e=s+deg, mid=s+deg/2;
+    const isWinner = hasWinner && p.score===maxScore;
+    const isActive = i===activeIdx;
+
+    const g = svgEl('g',{class:'pie-slice'});
+    if (isWinner) g.setAttribute('filter','url(#glow)');
+
+    // Background track (empty part)
+    const trackPath = svgEl('path',{
+      d: arc(s,e,R_OUT,R_IN),
+      fill: p.color,
+      opacity: '0.15'
+    });
+    g.appendChild(trackPath);
+
+    // Filled portion: grows from R_IN outward based on score/MAX_SCORE
+    const fillRatio = Math.min(Math.max(p.score, 0) / MAX_SCORE(), 1);
+    const R_FILL = R_IN + (R_OUT - R_IN) * fillRatio;
+    if (fillRatio > 0) {
+      const fillPath = svgEl('path',{
+        d: arc(s,e,R_FILL,R_IN),
+        fill: p.color,
+        opacity: isActive?'1': isWinner?'0.95':'0.82'
+      });
+      if (isActive) {
+        fillPath.setAttribute('stroke','rgba(255,255,255,0.5)');
+        fillPath.setAttribute('stroke-width','2');
+      }
+      g.appendChild(fillPath);
+    }
+
+    const textR = R_IN+(R_OUT-R_IN)*0.5;
+    const tp = polar(mid, textR);
+    let rot = mid;
+    const norm = ((mid%360)+360)%360;
+    if (norm>90 && norm<270) rot+=180;
+
+    const tg = svgEl('g',{transform:`translate(${tp.x},${tp.y}) rotate(${rot})`});
+    const sf = n<=3?30 : n<=4?26 : n<=5?22 : n<=6?19 : n<=8?15 : n<=10?12 : n<=13?10 : 8;
+    const nf = n<=3?18 : n<=4?16 : n<=5?14 : n<=6?12 : n<=8?10 : n<=10?8 : n<=13?7 : 6;
+    const gap = sf*0.68;
+
+    const st = svgEl('text',{x:0,y:0,'text-anchor':'middle','dominant-baseline':'middle',fill:'#fff','font-family':'DM Mono,monospace','font-weight':'500','font-size':sf,transform:`translate(0,${-gap*0.32})`});
+    st.textContent = p.score;
+    const nt = svgEl('text',{x:0,y:0,'text-anchor':'middle','dominant-baseline':'middle',fill:'rgba(255,255,255,0.92)','font-family':'Syne,sans-serif','font-weight':'700','font-size':nf,'letter-spacing':'0.8',transform:`translate(0,${gap*0.82})`,stroke:'#0f0e17','stroke-width':'3','paint-order':'stroke'});
+    nt.textContent = p.name.toUpperCase().slice(0,10);
+    tg.appendChild(st); tg.appendChild(nt);
+
+    if (isWinner) {
+      const starSize = n<=3?22 : n<=4?18 : n<=5?15 : n<=8?13 : n<=12?10 : 8;
+      const star = svgEl('text',{x:0,y:0,'text-anchor':'middle','dominant-baseline':'middle',fill:'#f7c948','font-size':starSize,transform:`translate(0,${gap*2.2})`,stroke:'#0f0e17','stroke-width':'4','paint-order':'stroke'});
+      star.textContent = '★';
+      tg.appendChild(star);
+    }
+
+    // 😭 erscheint wenn: dieser Spieler hat 0 Punkte UND alle anderen haben ≥50% des Ziels
+    const half = MAX_SCORE() * 0.5;
+    const othersAllAtHalf = state.players.every((op, oi) => oi === i || op.score >= half);
+    if (p.score === 0 && othersAllAtHalf && state.players.length > 1) {
+      const crySize = n<=3?20 : n<=4?17 : n<=5?14 : n<=8?12 : n<=12?10 : 8;
+      const cry = svgEl('text',{x:0,y:0,'text-anchor':'middle','dominant-baseline':'middle','font-size':crySize,transform:`translate(0,${gap*2.2})`,stroke:'#0f0e17','stroke-width':'3','paint-order':'stroke'});
+      cry.textContent = '😭';
+      tg.appendChild(cry);
+    }
+    g.appendChild(tg);
+
+    g.addEventListener('click', () => selectPlayer(i));
+    g.addEventListener('touchend', e=>{e.preventDefault();selectPlayer(i);});
+    svg.appendChild(g);
+  });
+
+  // ── Start player arrow on outer rim ──
+  {
+    const n = state.players.length;
+    const deg = 360 / n;
+    const arrowDeg = startPlayerIdx * deg + deg / 2 - 90; // point to slice center
+    const arrowRad = arrowDeg * Math.PI / 180;
+    const arrowR = R_OUT + 14; // just outside outer ring
+    const ax = CX + arrowR * Math.cos(arrowRad);
+    const ay = CY + arrowR * Math.sin(arrowRad);
+    const playerColor = state.players[startPlayerIdx]?.color || '#fff';
+
+    // Arrow shape: triangle pointing inward
+    const arrowSize = 10;
+    const inwardRad = (arrowDeg + 180) * Math.PI / 180;
+    // tip of arrow (pointing toward pie)
+    const tipX = ax + Math.cos(arrowRad) * (-arrowSize * 0.5);
+    const tipY = ay + Math.sin(arrowRad) * (-arrowSize * 0.5);
+    // two base points perpendicular
+    const perpRad = arrowRad + Math.PI / 2;
+    const b1x = ax + Math.cos(arrowRad) * arrowSize + Math.cos(perpRad) * arrowSize * 0.6;
+    const b1y = ay + Math.sin(arrowRad) * arrowSize + Math.sin(perpRad) * arrowSize * 0.6;
+    const b2x = ax + Math.cos(arrowRad) * arrowSize - Math.cos(perpRad) * arrowSize * 0.6;
+    const b2y = ay + Math.sin(arrowRad) * arrowSize - Math.sin(perpRad) * arrowSize * 0.6;
+
+    const arrow = svgEl('polygon', {
+      points: `${tipX},${tipY} ${b1x},${b1y} ${b2x},${b2y}`,
+      fill: playerColor,
+      stroke: '#0f0e17',
+      'stroke-width': '2',
+      'stroke-linejoin': 'round'
+    });
+    svg.appendChild(arrow);
+  }
+
+  svg.appendChild(svgEl('circle',{cx:CX,cy:CY,r:R_IN-5,fill:'#0f0e17',stroke:'#2a2940','stroke-width':'1.5'}));
+  const cl1=svgEl('text',{x:CX,y:CY-8,'text-anchor':'middle','dominant-baseline':'middle',fill:'#fffffe','font-family':'Syne,sans-serif','font-weight':'800','font-size':'17','letter-spacing':'-1'});
+  cl1.textContent='FLIP';
+  const cl2=svgEl('text',{x:CX,y:CY+12,'text-anchor':'middle','dominant-baseline':'middle',fill:'#ff6b35','font-family':'Syne,sans-serif','font-weight':'800','font-size':'17','letter-spacing':'-1'});
+  cl2.textContent='7';
+  svg.appendChild(cl1); svg.appendChild(cl2);
+
+  // Invisible tap target over center to advance start player
+  const centerTap = svgEl('circle',{cx:CX,cy:CY,r:R_IN-5,fill:'transparent',cursor:'pointer'});
+  centerTap.addEventListener('click', () => {
+    startPlayerIdx = (startPlayerIdx + 1) % state.players.length;
+    renderPie();
+    const name = state.players[startPlayerIdx].name;
+    showToast(`Startspieler: ${name}`);
+  });
+  centerTap.addEventListener('touchend', e => { e.preventDefault(); e.stopPropagation();
+    startPlayerIdx = (startPlayerIdx + 1) % state.players.length;
+    renderPie();
+    showToast(`Startspieler: ${state.players[startPlayerIdx].name}`);
+  });
+  svg.appendChild(centerTap);
+}
+
+// ── Player selection ───────────────────────────────────
+const chipName  = document.getElementById('chip-name');
+const chipScore = document.getElementById('chip-score');
+const chip      = document.getElementById('active-chip');
+const hint      = document.getElementById('no-player-hint');
+const deltaInput= document.getElementById('delta-input');
+const addBtn    = document.getElementById('add-btn');
+const subBtn    = document.getElementById('sub-btn');
+let subBtnTimer = null;
+
+function selectPlayer(idx) {
+  activeIdx = idx;
+  const p = state.players[idx];
+  chipName.textContent  = p.name.toUpperCase().slice(0,8);
+  chipScore.textContent = p.score;
+  chipScore.style.color = p.color;
+  chip.style.borderColor  = p.color;
+  addBtn.style.background = p.color;
+  deltaInput.style.borderColor = p.color;
+  hint.style.display        = 'none';
+  deltaInput.style.display  = 'block';
+  addBtn.style.display      = 'block';
+  document.getElementById('sub-btn').style.display = 'block';
+  subBtn.style.display      = 'block';
+  subBtn.style.borderColor  = p.color;
+  subBtn.classList.remove('confirm');
+  clearTimeout(subBtnTimer);
+  deltaInput.value = '';
+  deltaInput.focus();
+  renderPie();
+}
+
+addBtn.addEventListener('click', () => commitScore());
+deltaInput.addEventListener('keydown', e => { if (e.key==='Enter') commitScore(); });
+
+// Sub-btn: double-tap to confirm
+let subTapTimer = null;
+subBtn.addEventListener('click', () => {
+  if (subTapTimer) {
+    // Second tap: commit subtraction
+    clearTimeout(subTapTimer);
+    subTapTimer = null;
+    subBtn.classList.remove('confirm');
+    subBtn.textContent = '− SUB';
+    commitScore(true); // true = subtract
+  } else {
+    // First tap: ask for confirmation
+    subBtn.classList.add('confirm');
+    subBtn.textContent = '✓ Sicher?';
+    subTapTimer = setTimeout(() => {
+      subTapTimer = null;
+      subBtn.classList.remove('confirm');
+      subBtn.textContent = '− SUB';
+    }, 2000);
+  }
+});
+
+// Sub button: needs double-tap to confirm
+
+
+// Back to setup: siehe oben bei "── Back to setup ──"
+
+function commitScore(subtract=false) {
+  if (activeIdx===null) return;
+  const raw = parseInt(deltaInput.value, 10);
+  if (isNaN(raw)) { showToast('Bitte eine Zahl eingeben'); return; }
+  const val = subtract ? -Math.abs(raw) : raw;
+  const p = state.players[activeIdx];
+  const prev = p.score;
+  state.history.push({ playerIdx: activeIdx, delta: val, before: prev });
+  p.score += val;
+  chipScore.textContent = p.score;
+  deltaInput.value = '';
+  renderPie();
+  deltaInput.focus();
+  showToast(`${p.name}: ${val>=0?'+':''}${val} → ${p.score}`);
+  if (p.score>=CONFETTI_AT() && prev<CONFETTI_AT() && !confettiFired.has(activeIdx)) {
+    confettiFired.add(activeIdx);
+    launchConfetti(p.color);
+  }
+}
+
+// ── Siegerehrung ────────────────────────────────────────
+document.getElementById('siegerBtn').onclick = openSiegerehrung;
+document.getElementById('siegerClose').onclick = () => {
+  overlay.classList.remove('active');
+  document.getElementById('sieger-modal').classList.remove('open');
+};
+
+// ── History ────────────────────────────────────────────
+const overlay = document.getElementById('overlay');
+document.getElementById('historyBtn').onclick = () => {
+  renderHistory();
+  document.getElementById('history-panel').classList.add('open');
+  overlay.classList.add('active');
+};
+overlay.onclick = () => {
+  document.getElementById('history-panel').classList.remove('open');
+  document.getElementById('reset-modal').classList.remove('open');
+  document.getElementById('sieger-modal').classList.remove('open');
+  overlay.classList.remove('active');
+};
+
+function renderHistory() {
+  const list = document.getElementById('historyList');
+  const undo = document.getElementById('undoBtn');
+  if (!state.history.length) { list.innerHTML='<div class="empty-history">Noch keine Einträge</div>'; undo.disabled=true; return; }
+  undo.disabled = false;
+  list.innerHTML = [...state.history].reverse().map((e,ri) => {
+    const p=state.players[e.playerIdx], rnd=state.history.length-ri;
+    return `<div class="history-item">
+      <div><div class="hist-player" style="color:${p.color}">${esc(p.name)}</div><div class="hist-round">Runde ${rnd} · vorher: ${e.before}</div></div>
+      <div class="hist-delta ${e.delta<0?'neg':''}">${e.delta>=0?'+':''}${e.delta} → ${e.before+e.delta}</div>
+    </div>`;
+  }).join('');
+}
+
+document.getElementById('undoBtn').onclick = () => {
+  if (!state.history.length) return;
+  const last = state.history.pop();
+  state.players[last.playerIdx].score = last.before;
+  if (state.players[last.playerIdx].score<CONFETTI_AT()) confettiFired.delete(last.playerIdx);
+  if (activeIdx!==null) chipScore.textContent = state.players[activeIdx].score;
+  renderPie(); renderHistory();
+  showToast('Letzte Eingabe rückgängig');
+};
+
+// ── Reset ──────────────────────────────────────────────
+document.getElementById('resetBtn').onclick = () => { overlay.classList.add('active'); document.getElementById('reset-modal').classList.add('open'); };
+document.getElementById('cancelReset').onclick = () => { overlay.classList.remove('active'); document.getElementById('reset-modal').classList.remove('open'); };
+document.getElementById('confirmReset').onclick = () => {
+  state.players.forEach(p=>p.score=0); state.history=[]; confettiFired.clear(); startPlayerIdx=0;
+  if (activeIdx!==null) chipScore.textContent='0';
+  overlay.classList.remove('active'); document.getElementById('reset-modal').classList.remove('open');
+  renderPie(); showToast('Punkte zurückgesetzt');
+};
+
+// ── Toast ──────────────────────────────────────────────
+let toastTimer;
+function showToast(msg) {
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>t.classList.remove('show'),2000);
+}
+function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ── Confetti ───────────────────────────────────────────
+const confCanvas=document.getElementById('confetti-canvas');
+const confCtx=confCanvas.getContext('2d');
+let particles=[],rafId=null;
+
+function launchConfetti(base) {
+  // 3 Wellen dicht nacheinander (0 ms / 600 ms / 1200 ms Verzögerung)
+  // → insgesamt 600 Partikel, füllt den Bildschirm deutlich länger
+  [0, 300, 600].forEach(delay => {
+    setTimeout(() => {
+      confCanvas.width=window.innerWidth; confCanvas.height=window.innerHeight;
+      const pal=[base,'#f7c948','#fffffe','#4ecdc4','#ff6b35','#a78bfa','#fb7185'];
+      for(let i=0;i<200;i++) particles.push({
+        x:Math.random()*confCanvas.width, y:-10-Math.random()*100,
+        w:6+Math.random()*9, h:3+Math.random()*5,
+        color:pal[Math.floor(Math.random()*pal.length)],
+        vx:(Math.random()-.5)*5, vy:1.5+Math.random()*4,
+        angle:Math.random()*Math.PI*2, spin:(Math.random()-.5)*0.18,
+        grav:0.07+Math.random()*0.05, life:1
+      });
+      if(!rafId) tick();
+    }, delay);
+  });
+}
+function tick() {
+  confCtx.clearRect(0,0,confCanvas.width,confCanvas.height);
+  particles=particles.filter(p=>p.life>0.02);
+  particles.forEach(p=>{
+    p.vy+=p.grav; p.x+=p.vx; p.y+=p.vy; p.angle+=p.spin;
+    if(p.y>confCanvas.height*0.88) p.life-=0.03;
+    confCtx.save(); confCtx.globalAlpha=p.life;
+    confCtx.translate(p.x,p.y); confCtx.rotate(p.angle);
+    confCtx.fillStyle=p.color; confCtx.fillRect(-p.w/2,-p.h/2,p.w,p.h);
+    confCtx.restore();
+  });
+  if(particles.length){rafId=requestAnimationFrame(tick);}
+  else{confCtx.clearRect(0,0,confCanvas.width,confCanvas.height);rafId=null;}
+}
+
+// ── Wake Lock (Display bleibt an) ─────────────────────
+let wakeLock = null;
+async function requestWakeLock() {
+  if ('wakeLock' in navigator) {
+    try {
+      wakeLock = await navigator.wakeLock.request('screen');
+    } catch(e) { /* silent fail */ }
+  }
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') requestWakeLock();
+});
+requestWakeLock();
+</script>
+<script>
+// ── PWA Service Worker (Offline-Cache) ─────────────────────
+// Wird als Blob-URL registriert, damit keine separate sw.js-Datei nötig ist.
+// Cached die HTML beim ersten Laden → App funktioniert danach komplett offline.
+if ('serviceWorker' in navigator) {
+  const swCode = `
+    const CACHE = 'flip7-v28';
+    self.addEventListener('install', e => {
+      e.waitUntil(
+        caches.open(CACHE).then(c => c.addAll([self.location.href.replace(/\\/[^\\/]*$/, '') + '/']))
+      );
+      self.skipWaiting();
+    });
+    self.addEventListener('activate', e => {
+      e.waitUntil(caches.keys().then(keys =>
+        Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
+      ));
+      self.clients.claim();
+    });
+    self.addEventListener('fetch', e => {
+      e.respondWith(
+        caches.match(e.request).then(cached => cached || fetch(e.request).then(resp => {
+          const clone = resp.clone();
+          caches.open(CACHE).then(c => c.put(e.request, clone));
+          return resp;
+        }))
+      );
+    });
+  `;
+  const blob = new Blob([swCode], { type: 'application/javascript' });
+  const swUrl = URL.createObjectURL(blob);
+  navigator.serviceWorker.register(swUrl).catch(() => {});
+}
+</script>
+</body>
+</html>
