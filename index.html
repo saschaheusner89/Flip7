@@ -90,9 +90,21 @@
   }
   .drag-handle:active { cursor: grabbing; border-color: var(--accent); color: var(--text); }
   .name-input { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-family: 'Syne', sans-serif; font-size: 0.85rem; font-weight: 700; padding: 0.5rem 0.6rem; flex: 1; min-width: 0; max-width: 140px; outline: none; transition: border-color 0.2s; }
-  .color-swatch { width: 34px; height: 34px; border-radius: 8px; border: 2px solid var(--border); cursor: pointer; flex-shrink: 0; transition: transform 0.12s; }
-  .color-swatch:active { transform: scale(0.9); }
-  .color-picker-hidden { position: absolute; width: 0; height: 0; opacity: 0; pointer-events: none; }
+  /* Color-Picker liegt unsichtbar direkt über dem Swatch.
+     iOS Safari blockiert picker.click() auf hidden inputs –
+     daher opacity:0 aber pointer-events aktiv. */
+  .color-swatch-wrap {
+    position: relative; width: 34px; height: 34px; flex-shrink: 0;
+  }
+  .color-swatch {
+    width: 34px; height: 34px; border-radius: 8px;
+    border: 2px solid var(--border); pointer-events: none;
+    transition: transform 0.12s;
+  }
+  .color-picker-hidden {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    opacity: 0; cursor: pointer; border: none; padding: 0;
+  }
   .medal-badge {
     display: flex; align-items: center; gap: 2px;
     font-size: 0.72rem; flex-shrink: 0; min-width: 18px;
@@ -533,27 +545,20 @@ function renderNameInputs() {
     const defaultColor = COLORS[i % COLORS.length];
     const currentColor = savedColorByName || savedColorBySlot || defaultColor;
 
+    // Swatch + Picker in einem Wrapper – Picker liegt transparent drüber (iOS-kompatibel)
+    const swatchWrap = document.createElement('div');
+    swatchWrap.className = 'color-swatch-wrap';
     const swatch = document.createElement('div');
     swatch.className = 'color-swatch';
     swatch.style.background = currentColor;
-    swatch.dataset.idx = i;
 
     const picker = document.createElement('input');
     picker.type = 'color';
     picker.className = 'color-picker-hidden';
     picker.value = currentColor;
-    // Suggested colors datalist
-    const listId = `color-list-${i}`;
-    const datalist = document.createElement('datalist');
-    datalist.id = listId;
-    const suggestions = ['#e8734a','#4dbfb8','#e8c04a','#9b7fe8','#e8708a','#4db88a','#6aaee8','#e8924a','#a0c878','#e87878','#78aee8','#c8a0e8','#78c8b8','#e8b878','#98b8e8','#c8e878'];
-    suggestions.forEach(col => { const opt = document.createElement('option'); opt.value = col; datalist.appendChild(opt); });
-    picker.setAttribute('list', listId);
-    row.appendChild(datalist);
-    picker.addEventListener('input', () => {
-      swatch.style.background = picker.value;
-    });
-    swatch.addEventListener('click', () => picker.click());
+    picker.addEventListener('input', () => { swatch.style.background = picker.value; });
+    swatchWrap.appendChild(swatch);
+    swatchWrap.appendChild(picker);
 
     // Medal badge: zeigt gesammelte 🥇🥈🥉 für diesen Spielernamen
     const medalBadge = document.createElement('div');
@@ -584,9 +589,8 @@ function renderNameInputs() {
 
     row.appendChild(inp);
     row.appendChild(medalBadge);
-    row.appendChild(swatch);
-    row.appendChild(picker);
-    enableDrag(handle, row, namesListEl); // Drag-and-Drop für diese Zeile aktivieren
+    row.appendChild(swatchWrap);
+    enableDrag(handle, row, namesListEl);
     namesListEl.appendChild(row);
   }
 }
