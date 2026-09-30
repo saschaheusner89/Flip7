@@ -9,23 +9,12 @@
 <meta name="theme-color" content="#0f0e17">
 <meta name="description" content="Flip 7 Score Tracker">
 
-<!-- PWA Manifest (als Inline-Data-URI – keine separate Datei nötig) -->
-<link rel="manifest" href="data:application/manifest+json,{
-  %22name%22:%22Flip%207%20Score%20Tracker%22,
-  %22short_name%22:%22Flip%207%22,
-  %22start_url%22:%22.%22,
-  %22display%22:%22standalone%22,
-  %22background_color%22:%22%230f0e17%22,
-  %22theme_color%22:%22%230f0e17%22,
-  %22orientation%22:%22portrait%22,
-  %22icons%22:[
-    {%22src%22:%22data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20512%20512'%3E%3Crect%20width%3D'512'%20height%3D'512'%20rx%3D'100'%20fill%3D'%230f0e17'%2F%3E%3Ctext%20x%3D'256'%20y%3D'310'%20text-anchor%3D'middle'%20font-family%3D'Arial%20Black%2Csans-serif'%20font-size%3D'260'%20font-weight%3D'900'%3E%3Ctspan%20fill%3D'%23fffffe'%3EF%3C%2Ftspan%3E%3Ctspan%20fill%3D'%23ff6b35'%3E7%3C%2Ftspan%3E%3C%2Ftext%3E%3C%2Fsvg%3E%22,%22sizes%22:%22512x512%22,%22type%22:%22image/svg+xml%22,%22purpose%22:%22any%20maskable%22}
-  ]
-}">
-
-<!-- iOS Home Screen Icon (SVG als Data-URI) -->
-<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='100' fill='%230f0e17'/><text x='256' y='310' text-anchor='middle' font-family='Arial Black,sans-serif' font-size='260' font-weight='900'><tspan fill='%23fffffe'>F</tspan><tspan fill='%23ff6b35'>7</tspan></text></svg>">
-<title>Flip 7 · Score v37</title>
+<!-- Web-App (GitHub Pages): Manifest und Icons als echte Dateien –
+     iOS kann weder ein Manifest als Data-URI noch SVG-Icons auf dem Home-Bildschirm -->
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<title>Flip 7 · Score v39</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script>
@@ -35,6 +24,16 @@
     if (_ao === null) _ao = (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) ? '1' : '0';
     if (_ao === '1') document.documentElement.classList.add('no-anim');
   } catch (e) {}
+  // iPhone/iPad: eigener Ziffernblock statt iOS-Tastatur, Vollbild bis in die Ecken (Kamera-Insel, Home-Balken).
+  // Nur auf iOS – Android (App und Browser) bleibt unverändert.
+  (function () {
+    var ios = /iP(hone|od|ad)/.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    if (!ios) return;
+    document.documentElement.classList.add('ios');
+    var vp = document.querySelector('meta[name="viewport"]');
+    if (vp) vp.setAttribute('content', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover');
+  })();
 </script>
 <style>
   :root {
@@ -1029,6 +1028,81 @@
   .cp-sw.used::after { content: ''; position: absolute; right: 3px; bottom: 3px; width: 6px; height: 6px; border-radius: 50%; background: rgba(15,14,23,.8); }
   .cp-hint { font-family: 'DM Mono', monospace; font-size: .6rem; color: #5d5c78; margin-top: -.45rem; }
 </style>
+<style>
+  /* ===== iPHONE / iPAD (html.ios) =====
+     iOS lässt sich die Tastatur nicht aufzwingen und schiebt beim Öffnen die ganze Seite hoch.
+     Darum ersetzt dort ein eigener Ziffernblock die Tastatur; das Punktefeld ist nur Anzeige.
+     Die Maße kommen aus svh (Höhe bei eingeblendeten Safari-Leisten) und ändern sich nie –
+     die Torte bleibt auf dem Pixel stehen. Oben/unten Platz für Kamera-Insel und Home-Balken. */
+  html.ios {
+    --safe-t: env(safe-area-inset-top, 0px);
+    --safe-b: env(safe-area-inset-bottom, 0px);
+    --app-height: calc(var(--safe-t) + (100vh - var(--safe-t)) * .57);
+  }
+  @supports (height: 100svh) {
+    html.ios { --app-height: calc(var(--safe-t) + (100svh - var(--safe-t)) * .57); }
+  }
+  html.ios, html.ios body { overscroll-behavior: none; }
+  html.ios body { position: fixed; inset: 0; }          /* Seite kann weder scrollen noch wippen */
+  html.ios #game { padding-top: var(--safe-t); touch-action: none; }
+  html.ios #setup { padding-top: calc(2rem + var(--safe-t)); padding-bottom: calc(2rem + var(--safe-b)); }
+  html.ios .toast { top: calc(var(--topbar) + 6px + var(--safe-t)); }
+  html.ios #history-panel { padding-bottom: calc(1rem + var(--safe-b)); }
+  /* Punktefeld: nur Anzeige – bekommt nie den Fokus, also erscheint nie die iOS-Tastatur */
+  html.ios #delta-input { pointer-events: none; caret-color: transparent; -webkit-user-select: none; user-select: none; }
+
+  /* Ziffernblock im Tastatur-Bereich: fährt hoch, sobald eine Spieler:in gewählt ist, und bleibt */
+  #numpad { display: none; }
+  html.ios #numpad {
+    display: grid; position: fixed; left: 0; right: 0; top: var(--app-height); bottom: 0; z-index: 6;
+    grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(4, 1fr); gap: 8px;
+    padding: 10px 12px calc(10px + var(--safe-b));
+    background: linear-gradient(180deg, var(--bg-2), var(--bg) 70%);
+    border-top: 1px solid var(--border);
+    transform: translateY(104%); visibility: hidden;
+    transition: transform .34s var(--ease-out), visibility 0s linear .34s;
+    touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+  }
+  html.ios body[data-screen="game"].pad-on #numpad { transform: none; visibility: visible; transition: transform .34s var(--ease-out); }
+  .np-key {
+    position: relative; overflow: hidden; min-height: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+    color: var(--text); font-family: 'DM Mono', monospace; font-size: 1.75rem; font-weight: 500;
+    cursor: pointer; touch-action: none;
+    transition: transform .14s var(--spring), background .12s, border-color .12s, filter .12s;
+  }
+  .np-key.down { transform: scale(.93); background: var(--surface-2); border-color: var(--border-hi); }
+  .np-key svg { width: 28px; height: 28px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+  .np-del { color: var(--muted); }
+  .np-enter, .np-enter.down { background: var(--pc); border-color: transparent; color: #fff; box-shadow: 0 8px 22px -10px var(--pc); }
+  .np-enter.down { filter: brightness(1.18); }
+
+  /* iPhone quer: lässt sich im Browser nicht sperren → freundlicher Hinweis statt gequetschter Torte */
+  #rotate-hint { display: none; }
+  @media (orientation: landscape) and (max-height: 500px) {
+    html.ios #rotate-hint {
+      display: flex; position: fixed; inset: 0; z-index: 3000; background: var(--bg);
+      flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+      color: var(--muted); font-size: .8rem; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase;
+    }
+  }
+  .rh-phone { width: 30px; height: 50px; border: 3px solid var(--text); border-radius: 8px; animation: rhTurn 2.6s var(--ease-out) infinite; }
+  @keyframes rhTurn { 0%, 25% { transform: rotate(-90deg); } 55%, 100% { transform: rotate(0); } }
+
+  /* Setup: Tipp „Zum Home-Bildschirm“ (nur iPhone in Safari) + Versionsnummer */
+  .ios-hint {
+    display: none; margin-top: .9rem; width: 100%;
+    align-items: center; gap: .65rem;
+    background: rgba(26,25,40,.85); border: 1px solid var(--border); border-radius: 14px;
+    padding: .6rem .5rem .6rem .8rem; font-size: .72rem; line-height: 1.4; color: var(--muted);
+  }
+  .ios-hint.show { display: flex; animation: fadeUp .5s var(--ease-out) .3s both; }
+  .ios-hint b { color: var(--text); }
+  .ios-hint svg { width: 22px; height: 22px; flex-shrink: 0; fill: none; stroke: var(--accent); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .ios-hint .x { margin-left: auto; flex-shrink: 0; background: none; border: none; color: var(--muted); font-size: 1.2rem; line-height: 1; padding: .3rem .5rem; cursor: pointer; }
+  .app-ver { margin-top: .9rem; font-family: 'DM Mono', monospace; font-size: .58rem; letter-spacing: 2px; color: var(--muted); opacity: .55; text-align: center; }
+</style>
 </head>
 <body data-screen="setup">
 
@@ -1076,6 +1150,12 @@
         Statistik
       </button>
     </div>
+    <div class="ios-hint" id="iosHint">
+      <svg viewBox="0 0 24 24"><path d="M12 15V3M8 7l4-4 4 4"/><path d="M7 10H5.5A1.5 1.5 0 0 0 4 11.5v8A1.5 1.5 0 0 0 5.5 21h13a1.5 1.5 0 0 0 1.5-1.5v-8a1.5 1.5 0 0 0-1.5-1.5H17"/></svg>
+      <span><b>Tipp:</b> In Safari auf <b>Teilen</b> → <b>„Zum Home-Bildschirm“</b>. Dann läuft Flip 7 im Vollbild und auch ohne Internet.</span>
+      <button class="x" type="button" aria-label="Tipp schließen">×</button>
+    </div>
+    <div class="app-ver" id="appVer"></div>
   </div>
 </div>
 
@@ -1304,6 +1384,7 @@
 
 <canvas id="fx-canvas"></canvas>
 <div class="toast" id="toast"></div>
+<div id="rotate-hint" aria-hidden="true"><div class="rh-phone"></div>Bitte hochkant halten</div>
 
 <script>
 const COLORS = ['#e8734a','#4dbfb8','#e8c04a','#9b7fe8','#e8708a','#4db88a','#6aaee8','#e8924a','#a0c878','#e87878','#78aee8','#c8a0e8','#78c8b8','#e8b878','#98b8e8','#c8e878'];
@@ -2005,7 +2086,20 @@ function haptic(kind) {
   try {
     if (window.Flip7Native && Flip7Native.haptic) Flip7Native.haptic(kind);
     else if (navigator.vibrate) navigator.vibrate(kind === 'long' ? 18 : 8);
+    else if (document.documentElement.classList.contains('ios')) iosTick();
   } catch (e) {}
+}
+// iPhone (iOS 18+): Ein Schalter (<input type="checkbox" switch>) gibt beim Umschalten einen fühlbaren
+// Tick – die einzige Haptik, an die eine Web-App dort herankommt. Klappt nur direkt beim Tippen;
+// ältere iOS-Versionen ignorieren es einfach.
+function iosTick() {
+  const l = document.createElement('label');
+  l.setAttribute('aria-hidden', 'true');
+  l.style.display = 'none';
+  l.innerHTML = '<input type="checkbox" switch>';
+  document.head.appendChild(l);
+  l.click();
+  l.remove();
 }
 function fxBurst(i) {
   if (!ANIM.on || !state.players[i]) return;
@@ -2734,6 +2828,7 @@ function showGame(intro, instantSetupHide = false) {
     if (ANIM.on && intro) retrigger(game, 'enter');
   }
   setModeBadge();
+  syncPad();
   if (startPlayerIdx >= state.players.length) startPlayerIdx = 0;
   resetPieAnim();
   sizePie();
@@ -2781,6 +2876,7 @@ function gotoSetup() {
   document.body.dataset.screen = 'setup';
   retrigger($('setupInner'), 'enter');
   activeIdx = null;
+  syncPad();
   stopClock(); // Uhrzeit-Interval stoppen
   // hide input bar elements
   hint.style.display = 'block';
@@ -2827,6 +2923,8 @@ function selectPlayer(idx, focus = true) {
   inputBar.style.setProperty('--pc', p.color);
   inputBar.style.setProperty('--pc-a', rgba(p.color, 0.28));
   inputBar.classList.add('has-player');
+  if (numpad) numpad.style.setProperty('--pc', p.color);
+  syncPad();
   deltaInput.style.borderColor = p.color;
   hint.style.display       = 'none';
   deltaInput.style.display = 'block';
@@ -2860,9 +2958,70 @@ document.addEventListener('mousedown', e => { if (keepsFocus(e)) e.preventDefaul
 // Tastatur zeigen. Hat das Feld den Fokus schon (Tastatur z. B. per Zurück-Geste weggewischt),
 // bewirkt focus() nichts – dann holt die App (APK) die Tastatur nativ zurück.
 function showKeyboard() {
+  if (IOS_PAD) { syncPad(); return; }      // iPhone: Ziffernblock statt Tastatur
   const had = document.activeElement === deltaInput;
   deltaInput.focus();
   if (had && window.Flip7Native && Flip7Native.keyboard) { try { Flip7Native.keyboard(); } catch (e) {} }
+}
+
+// ── iPhone/iPad: eigener Ziffernblock ──────────────────
+// Die iOS-Tastatur lässt sich nicht offen halten und schiebt beim Öffnen die Seite samt Torte hoch.
+// Auf iOS tippt man die Punkte deshalb in einen eigenen Ziffernblock im Tastatur-Bereich.
+// Das Punktefeld ist dort nur Anzeige und bekommt nie den Fokus.
+const IOS_PAD = document.documentElement.classList.contains('ios');
+const numpad = IOS_PAD ? buildNumpad() : null;
+function buildNumpad() {
+  deltaInput.readOnly = true;
+  deltaInput.tabIndex = -1;
+  deltaInput.setAttribute('inputmode', 'none');
+  const el = document.createElement('div');
+  el.id = 'numpad';
+  el.setAttribute('role', 'group');
+  el.setAttribute('aria-label', 'Ziffernblock');
+  const key = (k, label, cls = '', aria = '') =>
+    `<button type="button" class="np-key rip${cls}" data-k="${k}"${aria ? ` aria-label="${aria}"` : ''}>${label}</button>`;
+  el.innerHTML = [1, 2, 3, 4, 5, 6, 7, 8, 9].map(d => key(d, d)).join('') +
+    key('del', '<svg viewBox="0 0 24 24"><path d="M9 5h10.5A1.5 1.5 0 0 1 21 6.5v11a1.5 1.5 0 0 1-1.5 1.5H9l-6-7z"/><path d="M12.5 9.5l5 5M17.5 9.5l-5 5"/></svg>', ' np-del', 'Löschen') +
+    key(0, 0) +
+    key('enter', '<svg viewBox="0 0 24 24"><path d="M20 5v7a3 3 0 0 1-3 3H5"/><path d="M9 11l-4 4 4 4"/></svg>', ' np-enter', 'Eintragen');
+  document.body.appendChild(el);
+  const up = e => { const b = e.target.closest && e.target.closest('.np-key'); if (b) b.classList.remove('down'); };
+  el.addEventListener('pointerdown', e => { const b = e.target.closest('.np-key'); if (b) b.classList.add('down'); });
+  el.addEventListener('pointerup', up);
+  el.addEventListener('pointercancel', up);
+  el.addEventListener('pointerout', up);
+  el.addEventListener('click', e => { const b = e.target.closest('.np-key'); if (b) padKey(b.dataset.k, b); });
+  return el;
+}
+function padKey(k, src) {
+  if (activeIdx === null) return;
+  haptic('tick');
+  if (k === 'enter') { commitScore(false, src || numpad.querySelector('.np-enter')); return; }
+  let v = deltaInput.value;
+  if (k === 'del') v = v.slice(0, -1);
+  else if (v.length < 4) v = (v === '0' ? '' : v) + k;
+  deltaInput.value = v;
+}
+// Ziffernblock ist da, solange eine Spieler:in gewählt ist (wie die Tastatur in der Android-App)
+function syncPad() {
+  if (IOS_PAD) document.body.classList.toggle('pad-on', activeIdx !== null);
+}
+if (IOS_PAD) {
+  // Hardware-Tastatur (z. B. am iPad) tippt ebenfalls in den Ziffernblock
+  document.addEventListener('keydown', e => {
+    if (document.body.dataset.screen !== 'game' || activeIdx === null || e.metaKey || e.ctrlKey || e.altKey) return;
+    const t = document.activeElement;
+    if (t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) && t !== deltaInput) return;   // Eingabe in einem Fenster
+    if (overlay.classList.contains('active')) return;
+    const k = /^[0-9]$/.test(e.key) ? e.key : e.key === 'Backspace' ? 'del' : e.key === 'Enter' ? 'enter' : null;
+    if (k === null) return;
+    e.preventDefault();
+    padKey(k);
+  });
+  // Bleibt die Seite nach der System-Tastatur (Namensfeld o. Ä.) verschoben, zurück an ihren Platz
+  const unshift = () => { if (window.scrollX || window.scrollY) window.scrollTo(0, 0); };
+  document.addEventListener('focusout', () => setTimeout(unshift, 80));
+  if (window.visualViewport) visualViewport.addEventListener('resize', () => setTimeout(unshift, 80));
 }
 
 // Sub-btn: double-tap to confirm (mit ablaufendem Countdown-Balken)
@@ -3100,18 +3259,39 @@ function countUp(el, to, dur = 900, delay = 0, suffix = '') {
 }
 
 // ── Wake Lock (Display bleibt an) ─────────────────────
-let wakeLock = null;
+let wakeLock = null, wakeTry = 0;
 async function requestWakeLock() {
-  if ('wakeLock' in navigator) {
-    try {
-      wakeLock = await navigator.wakeLock.request('screen');
-    } catch (e) { /* silent fail */ }
-  }
+  if (!('wakeLock' in navigator) || document.visibilityState !== 'visible') return;
+  if (wakeLock && !wakeLock.released) return;
+  wakeTry = Date.now();
+  try {
+    wakeLock = await navigator.wakeLock.request('screen');
+  } catch (e) { /* silent fail */ }
 }
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') requestWakeLock();
 });
+// Zusätzlich beim Tippen erneuern: iOS verlangt dafür teils eine Berührung
+// und gibt die Sperre bei jedem Sperren/App-Wechsel wieder frei
+document.addEventListener('pointerup', () => { if (Date.now() - wakeTry > 5000) requestWakeLock(); }, { passive: true });
 requestWakeLock();
+
+// ── Setup: Versionsnummer + iPhone-Tipp „Zum Home-Bildschirm“ ──
+(function () {
+  const v = (document.title.match(/v\d+(\.\d+)*/) || [''])[0];
+  $('appVer').textContent = v ? 'Flip 7 · ' + v : '';
+  if (!IOS_PAD) return;
+  const standalone = navigator.standalone || matchMedia('(display-mode: standalone)').matches;
+  let off = false;
+  try { off = localStorage.getItem('flip7_ios_hint_off') === '1'; } catch (e) {}
+  if (standalone || off) return;
+  const h = $('iosHint');
+  h.classList.add('show');
+  h.querySelector('.x').onclick = () => {
+    h.classList.remove('show');
+    try { localStorage.setItem('flip7_ios_hint_off', '1'); } catch (e) {}
+  };
+})();
 </script>
 
 <script>
@@ -3775,37 +3955,13 @@ window.flip7Back = function () {
 })();
 </script>
 <script>
-// ── PWA Service Worker (Offline-Cache) ─────────────────────
-// Wird als Blob-URL registriert, damit keine separate sw.js-Datei nötig ist.
-// Cached die HTML beim ersten Laden → App funktioniert danach komplett offline.
-if ('serviceWorker' in navigator) {
-  const swCode = `
-    const CACHE = 'flip7-v37';
-    self.addEventListener('install', e => {
-      e.waitUntil(
-        caches.open(CACHE).then(c => c.addAll([self.location.href.replace(/\\/[^\\/]*$/, '') + '/']))
-      );
-      self.skipWaiting();
-    });
-    self.addEventListener('activate', e => {
-      e.waitUntil(caches.keys().then(keys =>
-        Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
-      ));
-      self.clients.claim();
-    });
-    self.addEventListener('fetch', e => {
-      e.respondWith(
-        caches.match(e.request).then(cached => cached || fetch(e.request).then(resp => {
-          const clone = resp.clone();
-          caches.open(CACHE).then(c => c.put(e.request, clone));
-          return resp;
-        }))
-      );
-    });
-  `;
-  const blob = new Blob([swCode], { type: 'application/javascript' });
-  const swUrl = URL.createObjectURL(blob);
-  navigator.serviceWorker.register(swUrl).catch(() => {});
+// ── Web-App: Offline-Speicher (Service Worker) ─────────
+// Nur auf GitHub Pages bzw. http(s) – nicht in der APK, die hat ohnehin alles in sich.
+// sw.js liefert die Seite sofort aus dem Speicher und lädt Updates im Hintergrund
+// (eine neue Version gilt ab dem nächsten Start – nie mitten im Spiel).
+if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol) &&
+    location.hostname !== 'appassets.androidplatform.net' && !window.Flip7Native) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
 }
 </script>
 </body>

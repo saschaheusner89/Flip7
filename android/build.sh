@@ -13,7 +13,7 @@ TOOLS="${TOOLS:-$HERE/.tools}"
 OUT="$HERE/build"
 KEYSTORE="${KEYSTORE:-$HERE/flip7-release.p12}"   # nicht ins Git (Repo ist öffentlich)!
 KS_PASS="${KS_PASS:-}"
-VERSION_CODE="${VERSION_CODE:-37}"   # muss bei jedem Update steigen (GitHub-Build: 1000 + Build-Nummer)
+VERSION_CODE="${VERSION_CODE:-39}"   # muss bei jedem Update steigen (GitHub-Build: 1000 + Build-Nummer)
 VERSION_NAME="${VERSION_NAME:-$(sed -n 's/.*Score v\([0-9.]*\)<\/title>.*/\1/p' "$HERE/../index.html" | head -1)}"
 REQUIRE_KEYSTORE="${REQUIRE_KEYSTORE:-${CI:-}}"   # in CI nie einen neuen Schlüssel erzeugen
 

@@ -87,3 +87,13 @@ einem anderen Handy wieder laden. Ab und zu **Sichern → Teilen** (z. B. per Ma
 `flip7-release.p12` und das Passwort **nie ins Git** – das Repo ist öffentlich.
 Beides sicher aufbewahren, z. B. im Passwort-Manager oder in der Cloud.
 Geht der Schlüssel verloren, sind keine Updates mehr möglich. Dann bleibt nur der Umzug per „Daten übertragen“ in eine neu signierte App.
+
+## Web-App (iPhone und Browser)
+
+GitHub Pages veröffentlicht `main` unter **https://saschaheusner89.github.io/Flip7/**.
+Dazu gehören `index.html`, `manifest.webmanifest`, `sw.js` (Offline-Speicher), `icons/` und `.nojekyll`.
+
+- iPhone: Link in Safari öffnen → Teilen → „Zum Home-Bildschirm“. Dann Vollbild, offline, eigener Ziffernblock.
+- Updates: `index.html` auf `main` ändern. Die Web-App holt die neue Version im Hintergrund, sie gilt ab dem nächsten Start.
+- Das Repo nicht umbenennen: Die Adresse ist Teil der installierten Web-App.
+- Auf dem iPhone löscht das Entfernen des Home-Bildschirm-Symbols auch die Daten der Web-App.
