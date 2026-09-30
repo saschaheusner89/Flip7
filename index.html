@@ -25,7 +25,7 @@
 
 <!-- iOS Home Screen Icon (SVG als Data-URI) -->
 <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='100' fill='%230f0e17'/><text x='256' y='310' text-anchor='middle' font-family='Arial Black,sans-serif' font-size='260' font-weight='900'><tspan fill='%23fffffe'>F</tspan><tspan fill='%23ff6b35'>7</tspan></text></svg>">
-<title>Flip 7 · Score v31</title>
+<title>Flip 7 · Score v32</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script>
@@ -656,7 +656,7 @@
   .podium-wrap {
     position: relative;
     display: flex; align-items: flex-end; justify-content: center;
-    gap: 0.5rem; height: 130px;
+    gap: 0.5rem; min-height: 130px;
   }
   .podium-rays {
     position: absolute; left: 50%; top: 20%; width: 260px; height: 260px; margin: -130px 0 0 -130px;
@@ -804,7 +804,8 @@
   .a-fade { animation: fadeIn .5s ease-out backwards; animation-delay: var(--d, 0s); }
 
   /* Podium in Stats (kompakter als Siegerehrung) */
-  .stats-podium { display: flex; align-items: flex-end; justify-content: center; gap: 0.4rem; height: 104px; }
+  .stats-podium { display: flex; align-items: flex-end; justify-content: center; gap: 0.4rem; min-height: 104px; }
+  .sp-more { font-family: 'DM Mono', monospace; font-size: 0.56rem; color: var(--muted); }
   .sp-slot { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 3px; flex: 1; min-width: 0; }
   .sp-name { font-size: 0.66rem; font-weight: 800; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
   .sp-val  { font-family: 'DM Mono', monospace; font-size: 0.6rem; color: var(--muted); white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
@@ -1468,7 +1469,7 @@ function fxPuff(x, y, n = 7, color = '#8a8aa0') {
 // ── Konfetti (3 Wellen, jetzt mit Flatter-Physik) ──────
 // mode: 'rain' (von oben), 'cannons' (Kanonen links/rechts), {x,y} (Explosion)
 function launchConfetti(base, mode = 'rain') {
-  const pal = [base, '#f7c948', '#fffffe', '#4ecdc4', '#ff6b35', '#a78bfa', '#fb7185'];
+  const pal = [...[].concat(base), '#f7c948', '#fffffe', '#4ecdc4', '#ff6b35', '#a78bfa', '#fb7185'];
   [0, 300, 600].forEach((delay, wi) => {
     setTimeout(() => {
       const W = window.innerWidth, H = window.innerHeight;
@@ -2723,26 +2724,27 @@ function openSiegerehrung() {
   const medalLabel = { gold: '1.', silver: '2.', bronze: '3.' };
   const delay = { bronze: 0.1, silver: 0.3, gold: 0.55 };
 
+  // Gleichstand: alle mit derselben Medaille stehen gemeinsam auf ihrer Stufe
   ['silver', 'gold', 'bronze'].forEach(type => {
-    const p = awarded.find(a => a.medal === type);
-    if (!p) return;
+    const ps = awarded.filter(a => a.medal === type);
     const slot = document.createElement('div');
     slot.className = `podium-slot slot-${type}`;
+    if (!ps.length) { wrap.appendChild(slot); return; }   // leerer Platzhalter → Gold bleibt mittig
     slot.style.setProperty('--d', delay[type] + 's');
     slot.innerHTML = `
       ${type === 'gold' ? '<div class="podium-rays"></div>' : ''}
-      <div class="podium-name" style="color:${p.color}">${esc(p.name)}</div>
-      <div class="podium-score">${p.score} Pkt</div>
+      ${ps.map(p => `<div class="podium-name" style="color:${p.color}">${esc(p.name)}</div>`).join('')}
+      <div class="podium-score">${ps[0].score} Pkt</div>
       <div class="podium-medal">${medalEmoji[type]}</div>
       <div class="podium-block ${type}">${medalLabel[type]}</div>`;
     wrap.appendChild(slot);
-    countUp(slot.querySelector('.podium-score'), p.score, 900, (delay[type] + 0.4) * 1000, ' Pkt');
+    countUp(slot.querySelector('.podium-score'), ps[0].score, 900, (delay[type] + 0.4) * 1000, ' Pkt');
   });
 
   openModal('sieger-modal');
-  // Konfetti in der Siegerfarbe
-  const winner = awarded.find(a => a.medal === 'gold');
-  if (winner) launchConfetti(winner.color, ANIM.on ? 'cannons' : 'rain');
+  // Konfetti in der Siegerfarbe (bei geteiltem Sieg in allen Siegerfarben)
+  const winners = awarded.filter(a => a.medal === 'gold');
+  if (winners.length) launchConfetti(winners.map(w => w.color), ANIM.on ? 'cannons' : 'rain');
 
   // Setup-Badges aktualisieren (damit beim nächsten Öffnen die neuen Medaillen sichtbar sind)
   renderNameInputs();
@@ -2919,7 +2921,15 @@ function renderStatsPodium(players, A) {
   const el = $('sc-podium');
   if (!players.length) { el.innerHTML = '<div class="empty-stats">Noch keine Spiele gespeichert</div>'; return; }
   const sorted = [...players].sort((a, b) => b.gold - a.gold || b.silver - a.silver || b.bronze - a.bronze);
-  const top3 = sorted.slice(0, 3);
+  // Gleiche Medaillenbilanz = gleicher Platz (wie bei der Siegerehrung); ohne Medaille kein Podest
+  const groups = [];
+  sorted.filter(p => p.gold + p.silver + p.bronze > 0).forEach(p => {
+    const g = groups[groups.length - 1];
+    if (g && g[0].gold === p.gold && g[0].silver === p.silver && g[0].bronze === p.bronze) g.push(p);
+    else groups.push([p]);
+  });
+  if (!groups.length) { el.innerHTML = '<div class="empty-stats">Noch keine Medaillen im Zeitraum</div>'; return; }
+  const top3 = groups.slice(0, 3);
   // Reihenfolge: Silber-Gold-Bronze (Silber links, Gold Mitte, Bronze rechts)
   const cfg = [
     { type: 'silver', emoji: '🥈', cls: 'ss', lbl: '2.', d: 0.3 },
@@ -2927,12 +2937,14 @@ function renderStatsPodium(players, A) {
     { type: 'bronze', emoji: '🥉', cls: 'sb', lbl: '3.', d: 0.12 }
   ];
   const medTxt = p => [p.gold && `${p.gold}🥇`, p.silver && `${p.silver}🥈`, p.bronze && `${p.bronze}🥉`].filter(Boolean).join(' ') || '–';
-  const slots = [top3[1], top3[0], top3[2]].map((p, si) => {
-    if (!p) return '';
+  const slots = [top3[1], top3[0], top3[2]].map((g, si) => {
     const m = cfg[si];
+    if (!g) return `<div class="sp-slot ${m.cls}"></div>`;   // Platzhalter → Gold bleibt mittig
+    const names = g.slice(0, 3).map(p => `<div class="sp-name" style="color:${p.color}">${esc(p.name)}</div>`).join('') +
+      (g.length > 3 ? `<div class="sp-more">+${g.length - 3} weitere</div>` : '');
     return `<div class="sp-slot ${m.cls}" style="--d:${m.d}s">
-      <div class="sp-name" style="color:${p.color}">${esc(p.name)}</div>
-      <div class="sp-val">${medTxt(p)}</div>
+      ${names}
+      <div class="sp-val">${medTxt(g[0])}</div>
       <div class="sp-emoji">${m.emoji}</div>
       <div class="sp-block ${m.type}">${m.lbl}</div>
     </div>`;
@@ -3255,7 +3267,7 @@ window.flip7Back = function () {
 // Cached die HTML beim ersten Laden → App funktioniert danach komplett offline.
 if ('serviceWorker' in navigator) {
   const swCode = `
-    const CACHE = 'flip7-v31';
+    const CACHE = 'flip7-v32';
     self.addEventListener('install', e => {
       e.waitUntil(
         caches.open(CACHE).then(c => c.addAll([self.location.href.replace(/\\/[^\\/]*$/, '') + '/']))
