@@ -25,23 +25,42 @@
 
 <!-- iOS Home Screen Icon (SVG als Data-URI) -->
 <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='100' fill='%230f0e17'/><text x='256' y='310' text-anchor='middle' font-family='Arial Black,sans-serif' font-size='260' font-weight='900'><tspan fill='%23fffffe'>F</tspan><tspan fill='%23ff6b35'>7</tspan></text></svg>">
-<title>Flip 7 · Score v28</title>
+<title>Flip 7 · Score v30</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script>
+  // Animations-Einstellung so früh wie möglich setzen (verhindert kurzes Aufflackern)
+  try {
+    var _ao = localStorage.getItem('flip7_anim_off');
+    if (_ao === null) _ao = (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) ? '1' : '0';
+    if (_ao === '1') document.documentElement.classList.add('no-anim');
+  } catch (e) {}
+</script>
 <style>
   :root {
     --bg: #0f0e17;
+    --bg-2: #141322;
     --surface: #1a1928;
+    --surface-2: #222036;
     --border: #2a2940;
+    --border-hi: #3d3b5c;
     --accent: #ff6b35;
+    --accent-2: #ff9a4d;
     --text: #fffffe;
     --muted: #7e7d9a;
+    --good: #4ecdc4;
+    --bad: #ff6b6b;
     --radius: 18px;
     --topbar: 52px;
     --inputbar: 68px;
-    /* The whole game UI lives in 50vh → keyboard takes the other 50% */
+    /* The whole game UI lives in 57vh → keyboard takes the rest */
     --app-height: 57vh;
     --pie-height: calc(var(--app-height) - var(--topbar) - var(--inputbar));
+    --spring: cubic-bezier(.34, 1.56, .64, 1);
+    --ease-out: cubic-bezier(.22, 1, .36, 1);
+    --glow1: #ff6b35;
+    --pc: #ff6b35;
+    --pc-a: rgba(255,107,53,.3);
   }
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
   html, body {
@@ -51,31 +70,151 @@
     font-family: 'Syne', sans-serif;
     overflow: hidden;
   }
+  button { font-family: inherit; -webkit-user-select: none; user-select: none; }
 
+  /* ===== ANIMATIONEN AUS ===== */
+  html.no-anim *, html.no-anim *::before, html.no-anim *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+  html.no-anim .ambient, html.no-anim #pie-halo, html.no-anim #pie-gloss { display: none !important; }
+
+  /* ===== AMBIENT-HINTERGRUND (bewegte Farbwolken) ===== */
+  .ambient { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+  .blob { position: absolute; border-radius: 50%; will-change: transform; }
+  .blob.b1 {
+    width: 80vmax; height: 80vmax; top: -38vmax; left: -30vmax; opacity: .17;
+    background: radial-gradient(circle, var(--glow1) 0%, transparent 62%);
+    animation: drift1 24s ease-in-out infinite alternate;
+    transition: background .8s;
+  }
+  .blob.b2 {
+    width: 85vmax; height: 85vmax; bottom: -45vmax; right: -38vmax; opacity: .14;
+    background: radial-gradient(circle, #6c4dff 0%, transparent 62%);
+    animation: drift2 31s ease-in-out infinite alternate;
+  }
+  .blob.b3 {
+    width: 55vmax; height: 55vmax; top: 35vh; left: 30vw; opacity: .08;
+    background: radial-gradient(circle, #1fb5a8 0%, transparent 62%);
+    animation: drift3 19s ease-in-out infinite alternate;
+  }
+  @keyframes drift1 { to { transform: translate3d(22vw, 18vh, 0) scale(1.18); } }
+  @keyframes drift2 { to { transform: translate3d(-20vw, -24vh, 0) scale(1.1); } }
+  @keyframes drift3 { to { transform: translate3d(-26vw, -14vh, 0) scale(1.3); } }
+
+  /* Schwebende Flip-7-Karten im Startscreen */
+  .float-cards { position: absolute; inset: 0; display: none; }
+  body[data-screen="setup"] .float-cards { display: block; }
+  .fcard {
+    position: absolute; bottom: -90px; width: 44px; height: 62px; border-radius: 8px;
+    border: 1.5px solid rgba(255,255,255,.13);
+    background: linear-gradient(155deg, rgba(255,255,255,.08), rgba(255,255,255,.01));
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Syne', sans-serif; font-weight: 800; font-size: 1.35rem; color: var(--c);
+    opacity: 0; will-change: transform, opacity;
+    animation: floatUp var(--dur) linear var(--delay) infinite;
+  }
+  @keyframes floatUp {
+    0%   { transform: translate3d(0, 0, 0) rotate(var(--r0)); opacity: 0; }
+    12%  { opacity: .55; }
+    82%  { opacity: .45; }
+    100% { transform: translate3d(var(--dx), -125vh, 0) rotate(var(--r1)); opacity: 0; }
+  }
+
+  /* ===== ALLGEMEINE KEYFRAMES ===== */
+  @keyframes fadeIn   { from { opacity: 0; } }
+  @keyframes fadeUp   { from { opacity: 0; transform: translateY(14px); } }
+  @keyframes popIn    { from { opacity: 0; transform: scale(0); } }
+  @keyframes cardPop  { 0% { opacity: 0; transform: translateY(24px) scale(.88); } 100% { opacity: 1; transform: none; } }
+  @keyframes cardOut  { to { opacity: 0; transform: translateY(10px) scale(.94); } }
+  @keyframes numBump  { 0% { transform: scale(1); } 35% { transform: scale(1.32); } 100% { transform: scale(1); } }
+  @keyframes shakeX   { 0%,100% { transform: translateX(0); } 20% { transform: translateX(-5px); } 40% { transform: translateX(5px); } 60% { transform: translateX(-3px); } 80% { transform: translateX(3px); } }
+  @keyframes spin     { to { transform: rotate(360deg); } }
+  @keyframes shine    { 0%, 55% { transform: translateX(-130%) skewX(-20deg); } 100% { transform: translateX(330%) skewX(-20deg); } }
+  @keyframes ripple   { from { transform: translate(-50%,-50%) scale(0); opacity: .45; } to { transform: translate(-50%,-50%) scale(1); opacity: 0; } }
+
+  /* Tap-Ripple (per JS eingefügt) */
+  .rip { position: relative; overflow: hidden; }
+  .ripple-dot {
+    position: absolute; border-radius: 50%; pointer-events: none;
+    background: rgba(255,255,255,.55);
+    animation: ripple .55s var(--ease-out) forwards;
+  }
+</style>
+<style>
   /* ===== SETUP ===== */
   #setup {
     position: fixed; inset: 0;
     display: flex; flex-direction: column;
-    align-items: center; justify-content: center;
-    padding: 2rem; overflow-y: auto;
-    z-index: 10; background: var(--bg);
+    padding: 2rem 1.2rem; overflow-y: auto;
+    z-index: 10; background: transparent;
   }
-  .logo { font-size: 3rem; font-weight: 800; letter-spacing: -2px; line-height: 1; margin-bottom: 0.3rem; }
-  .logo span { color: var(--accent); }
-  .tagline { color: var(--muted); font-size: 0.85rem; letter-spacing: 3px; text-transform: uppercase; margin-bottom: 2.5rem; font-family: 'DM Mono', monospace; }
-  .setup-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.8rem; width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 1.4rem; }
-  .setup-card h2 { font-size: 0.85rem; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); }
+  #setup.leaving { animation: setupOut .32s ease-in forwards; pointer-events: none; }
+  @keyframes setupOut { to { opacity: 0; transform: scale(1.06); } }
+  /* margin:auto zentriert – scrollt aber sauber, wenn viele Spieler:innen */
+  .setup-inner { margin: auto; width: 100%; max-width: 380px; display: flex; flex-direction: column; align-items: center; }
+  .setup-inner.enter .setup-card { animation: cardPop .6s var(--ease-out) .12s both; }
+
+  .logo {
+    display: flex; align-items: center; font-size: 3rem; font-weight: 800;
+    letter-spacing: -2px; line-height: 1; margin-bottom: 0.45rem; perspective: 600px;
+  }
+  .logo .lt { display: inline-block; }
+  .setup-inner.enter .logo .lt { animation: letterDrop .7s var(--spring) both; animation-delay: calc(var(--i) * 70ms); }
+  @keyframes letterDrop { 0% { opacity: 0; transform: translateY(-40px) rotate(-12deg) scale(.6); } 100% { opacity: 1; transform: none; } }
+  .logo .seven-wrap { display: inline-block; margin-left: 8px; }
+  .setup-inner.enter .logo .seven-wrap { animation: letterDrop .8s var(--spring) .32s both; }
+  .logo .seven {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 0.92em; height: 1.22em; border-radius: 10px;
+    background: linear-gradient(145deg, #ff8a4d, var(--accent) 55%, #e5501c);
+    color: #fff; letter-spacing: 0; font-size: 0.9em;
+    box-shadow: 0 8px 26px -6px rgba(255,107,53,.75), inset 0 1px 0 rgba(255,255,255,.35);
+    animation: sevenFlip 7s ease-in-out 2.2s infinite;
+  }
+  @keyframes sevenFlip {
+    0%, 84% { transform: rotateY(0) translateY(0); }
+    90%     { transform: rotateY(180deg) translateY(-8px) scale(1.08); }
+    96%     { transform: rotateY(360deg) translateY(0) scale(1); }
+    100%    { transform: rotateY(360deg); }
+  }
+  .tagline {
+    color: var(--muted); font-size: 0.85rem; letter-spacing: 3px; text-transform: uppercase;
+    margin-bottom: 2rem; font-family: 'DM Mono', monospace;
+  }
+  .setup-inner.enter .tagline { animation: tagIn 1s var(--ease-out) .35s both; }
+  @keyframes tagIn { from { opacity: 0; letter-spacing: 12px; } }
+
+  .setup-card {
+    background: linear-gradient(180deg, #211f35, #1a1928);
+    border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 1.6rem 1.4rem; width: 100%;
+    display: flex; flex-direction: column; gap: 1.3rem;
+    box-shadow: 0 24px 60px -24px rgba(0,0,0,.8);
+  }
+  .setup-card h2 { font-size: 0.8rem; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); }
   .player-count-row { display: flex; align-items: center; gap: 1rem; justify-content: center; }
-  .count-btn { width: 48px; height: 48px; border-radius: 12px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 1.4rem; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.12s; }
-  .count-btn:active { background: var(--accent); border-color: var(--accent); transform: scale(0.93); }
+  .count-btn {
+    width: 48px; height: 48px; border-radius: 14px; border: 1px solid var(--border);
+    background: var(--bg); color: var(--text); font-size: 1.4rem; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: transform .25s var(--spring), background .15s, border-color .15s;
+  }
+  .count-btn:active { background: var(--accent); border-color: var(--accent); transform: scale(0.88); }
   #playerCount { font-size: 2.5rem; font-weight: 800; min-width: 60px; text-align: center; }
+  #playerCount.bump { animation: numBump .38s var(--spring); }
+
   .names-list { display: flex; flex-direction: column; gap: 0.7rem; }
-  .name-row { display: flex; gap: 0.4rem; align-items: center; transition: box-shadow 0.1s; }
+  .name-row { display: flex; gap: 0.4rem; align-items: center; max-height: 60px; transition: box-shadow 0.1s; }
+  .name-row.enter { animation: rowIn .45s var(--spring) both; animation-delay: calc(var(--i, 0) * 45ms); }
+  @keyframes rowIn { from { opacity: 0; transform: translateX(-26px) scale(.94); } }
+  .name-row.leaving { animation: rowOut .24s ease-in forwards; pointer-events: none; }
+  @keyframes rowOut { to { opacity: 0; transform: translateX(30px) scale(.9); max-height: 0; margin-bottom: -0.7rem; } }
   /* Visueller Linie-Indikator beim Drag-over */
   .name-row.drop-before { box-shadow: 0 -2px 0 0 var(--accent); }
   .name-row.drop-after  { box-shadow: 0  2px 0 0 var(--accent); }
-  /* Angegriffene Zeile leicht ausblenden während des Ziehens */
-  .name-row.is-dragging { opacity: 0.45; }
+  /* Gezogene Zeile "angehoben" */
+  .name-row.is-dragging { opacity: 0.9; filter: drop-shadow(0 10px 18px rgba(0,0,0,.6)); }
 
   /* Anfass-Handle zum Sortieren der Spielerreihenfolge */
   .drag-handle {
@@ -89,22 +228,26 @@
     transition: border-color 0.12s, color 0.12s;
   }
   .drag-handle:active { cursor: grabbing; border-color: var(--accent); color: var(--text); }
-  .name-input { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-family: 'Syne', sans-serif; font-size: 0.85rem; font-weight: 700; padding: 0.5rem 0.6rem; flex: 1; min-width: 0; max-width: 140px; outline: none; transition: border-color 0.2s; }
-  /* Color-Picker liegt unsichtbar direkt über dem Swatch.
-     iOS Safari blockiert picker.click() auf hidden inputs –
-     daher opacity:0 aber pointer-events aktiv. */
-  .color-swatch-wrap {
-    position: relative; width: 34px; height: 34px; flex-shrink: 0;
+  .name-input {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 10px; color: var(--text);
+    font-family: 'Syne', sans-serif; font-size: 0.85rem; font-weight: 700; padding: 0.5rem 0.6rem;
+    flex: 1; min-width: 0; max-width: 140px; outline: none;
+    transition: border-color 0.2s, box-shadow .2s;
   }
+  .name-input:focus { border-color: var(--rc, var(--accent)); box-shadow: 0 0 0 3px var(--rc-a, rgba(255,107,53,.25)); }
+  .name-input::placeholder { color: var(--muted); font-weight: 400; }
+
+  /* Farbfeld – öffnet den eigenen Color-Picker */
   .color-swatch {
-    width: 34px; height: 34px; border-radius: 8px;
-    border: 2px solid var(--border); pointer-events: none;
-    transition: transform 0.12s;
+    width: 34px; height: 34px; border-radius: 9px; flex-shrink: 0; cursor: pointer;
+    border: 2px solid rgba(255,255,255,.14);
+    box-shadow: 0 0 14px -3px var(--sw, transparent), inset 0 1px 0 rgba(255,255,255,.25);
+    transition: transform .3s var(--spring), box-shadow .3s;
   }
-  .color-picker-hidden {
-    position: absolute; inset: 0; width: 100%; height: 100%;
-    opacity: 0; cursor: pointer; border: none; padding: 0;
-  }
+  .color-swatch:active { transform: scale(.88); }
+  .color-swatch.pop { animation: swatchPop .5s var(--spring); }
+  @keyframes swatchPop { 0% { transform: scale(.6) rotate(-20deg); } 100% { transform: none; } }
+
   .medal-badge {
     display: flex; align-items: center; gap: 2px;
     font-size: 0.72rem; flex-shrink: 0; min-width: 18px;
@@ -117,47 +260,114 @@
     padding: 1px 3px; line-height: 1;
   }
   .medal-count { font-size: 0.58rem; color: var(--muted); }
-  .name-input:focus { border-color: var(--accent); }
-  .name-input::placeholder { color: var(--muted); font-weight: 400; }
-  .mode-row { display: flex; align-items: center; gap: 0.75rem; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 0.75rem 1rem; cursor: pointer; user-select: none; }
-  .mode-row input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; flex-shrink: 0; }
-  .mode-label { flex: 1; }
-  .mode-label strong { display: block; font-size: 0.95rem; font-weight: 700; }
-  .mode-label span { font-size: 0.75rem; color: var(--muted); font-family: 'DM Mono', monospace; }
-  .start-btn { background: var(--accent); color: #fff; border: none; border-radius: 14px; font-family: 'Syne', sans-serif; font-size: 1.1rem; font-weight: 800; padding: 1rem; cursor: pointer; letter-spacing: 1px; transition: all 0.12s; }
-  .start-btn:active { opacity: 0.88; transform: scale(0.97); }
 
-  /* ===== GAME — occupies exactly top 50vh ===== */
+  /* Optionen-Zeilen (Punkteziel / Animationen) */
+  .mode-row {
+    display: flex; align-items: center; gap: 0.75rem;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 12px;
+    padding: 0.75rem 1rem; cursor: pointer; user-select: none; -webkit-user-select: none;
+    transition: border-color .25s;
+  }
+  .mode-row:has(.switch:checked) { border-color: var(--border-hi); }
+  .mode-label { flex: 1; min-width: 0; }
+  .mode-label strong { display: block; font-size: 0.95rem; font-weight: 700; }
+  .mode-label span { font-size: 0.72rem; color: var(--muted); font-family: 'DM Mono', monospace; }
+  #zielpunkte {
+    display: none; width: 72px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    color: var(--text); font-family: 'DM Mono', monospace; font-size: 1rem; font-weight: 700;
+    padding: 0.4rem 0.5rem; text-align: center; outline: none; flex-shrink: 0;
+  }
+  #zielpunkte.show { display: block; animation: popIn .35s var(--spring); }
+  #zielpunkte:focus { border-color: var(--accent); }
+
+  /* Schalter (ersetzt die Checkbox-Optik) */
+  .switch {
+    -webkit-appearance: none; appearance: none; flex-shrink: 0;
+    width: 44px; height: 26px; border-radius: 99px; position: relative; cursor: pointer;
+    background: var(--border); outline: none; transition: background .25s;
+  }
+  .switch::after {
+    content: ''; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%;
+    background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,.45);
+    transition: transform .35s var(--spring);
+  }
+  .switch:checked { background: var(--accent); }
+  .switch:checked::after { transform: translateX(18px); }
+
+  .start-btn {
+    background: linear-gradient(135deg, #ff8a4d, var(--accent) 60%, #f2551f);
+    color: #fff; border: none; border-radius: 14px; font-family: 'Syne', sans-serif;
+    font-size: 1.1rem; font-weight: 800; padding: 1rem; cursor: pointer; letter-spacing: 1px;
+    box-shadow: 0 10px 28px -10px rgba(255,107,53,.85);
+    transition: transform .25s var(--spring), opacity .12s;
+  }
+  .start-btn::after {
+    content: ''; position: absolute; top: 0; left: 0; width: 38%; height: 100%; pointer-events: none;
+    background: linear-gradient(100deg, transparent, rgba(255,255,255,.32), transparent);
+    transform: translateX(-130%) skewX(-20deg);
+    animation: shine 3.8s ease-in-out 1.4s infinite;
+  }
+  .start-btn:active { transform: scale(0.96); }
+  .start-btn .arr { display: inline-block; transition: transform .3s var(--spring); }
+  .start-btn:active .arr { transform: translateX(6px); }
+  .ghost-btn {
+    background: transparent; border: 1px solid var(--border); border-radius: 12px;
+    color: var(--muted); font-family: 'DM Mono', monospace; font-size: 0.8rem; letter-spacing: 1px;
+    padding: 0.7rem; cursor: pointer; margin-top: -0.4rem;
+    display: flex; align-items: center; justify-content: center; gap: .5rem;
+    transition: color .2s, border-color .2s, transform .25s var(--spring);
+  }
+  .ghost-btn:active { color: var(--text); border-color: var(--border-hi); transform: scale(.97); }
+  .ghost-btn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+</style>
+<style>
+  /* ===== GAME — occupies the top 57vh ===== */
   #game {
     display: none;
     position: fixed;
     top: 0; left: 0; right: 0;
-    height: var(--app-height);   /* ← pinned to 50vh, keyboard won't touch this */
+    height: var(--app-height);   /* pinned, keyboard won't touch this */
     flex-direction: column;
-    background: var(--bg);
+    background: linear-gradient(180deg, rgba(15,14,23,.55), rgba(15,14,23,.2));
     border-bottom: 1px solid var(--border);
+    z-index: 5;
   }
+  #game.enter { animation: fadeIn .4s ease-out both; }
 
   .top-bar {
     flex-shrink: 0;
     height: var(--topbar);
     display: flex; align-items: center; justify-content: space-between;
-    padding: 0 1rem;
+    padding: 0 0.8rem 0 1rem; gap: 0.4rem;
     border-bottom: 1px solid var(--border);
+    background: rgba(15,14,23,.82);
     position: relative; /* needed so #game-clock can be centered with absolute */
   }
-
   /* Live-Uhrzeit in der Mitte der Game-Top-Bar */
   #game-clock {
-    position: absolute; left: 50%; transform: translateX(-50%);
+    flex: 1; min-width: 0; text-align: center; white-space: nowrap; overflow: hidden;
     font-family: 'DM Mono', monospace; font-size: 0.72rem;
     color: var(--muted); letter-spacing: 2px; pointer-events: none;
   }
-  .game-title { font-size: 1.05rem; font-weight: 800; }
-  .game-title span { color: var(--accent); }
-  .bar-actions { display: flex; gap: 0.5rem; }
-  .icon-btn { width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 1rem; transition: all 0.12s; }
-  .icon-btn:active { background: var(--accent); border-color: var(--accent); transform: scale(0.9); }
+  #game-clock .colon { animation: blink 2s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: .15; } }
+  .game-title { font-size: 1.05rem; font-weight: 800; display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+  .game-title .s7 {
+    display: inline-flex; align-items: center; justify-content: center; width: 17px; height: 22px;
+    border-radius: 5px; background: var(--accent); color: #fff; font-size: .8rem; margin-left: 3px;
+    box-shadow: 0 3px 10px -3px rgba(255,107,53,.8);
+    animation: sevenFlip 9s ease-in-out 3s infinite;
+  }
+  #mode-badge { display: none; font-size: 0.6rem; color: var(--accent); letter-spacing: 1px; margin-left: 6px; }
+  .bar-actions { display: flex; gap: 0.4rem; flex-shrink: 0; }
+  .icon-btn {
+    width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text); cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: transform .25s var(--spring), background .15s, border-color .15s, color .15s;
+  }
+  .icon-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .icon-btn:active { background: var(--accent); border-color: var(--accent); transform: scale(0.86); }
 
   /* Pie area */
   #pie-wrap {
@@ -167,11 +377,61 @@
     min-height: 0;   /* allow flex shrink */
     overflow: hidden;
   }
+  #pie-stage { position: relative; flex-shrink: 0; }
   #pie-svg {
+    position: relative; z-index: 1; display: block;
+    width: 100%; height: 100%;
     touch-action: manipulation;
     overflow: visible;
-    /* size set by JS */
   }
+  /* Farbiger Halo hinter der Torte (einmal gezeichnet, dann nur per GPU "geatmet") */
+  #pie-halo {
+    position: absolute; left: -15%; top: -15%; width: 130%; height: 130%;
+    pointer-events: none; opacity: .5; z-index: 0;
+    animation: haloBreath 5.5s ease-in-out infinite alternate;
+  }
+  @keyframes haloBreath { from { transform: scale(.94); opacity: .3; } to { transform: scale(1.03); opacity: .6; } }
+  /* Glühender Rahmen um das aktive Tortenstück */
+  #pie-glow {
+    position: absolute; inset: 0; width: 100%; height: 100%; z-index: 2;
+    pointer-events: none; overflow: visible;
+    animation: glowBreath 1.6s ease-in-out infinite alternate;
+  }
+  @keyframes glowBreath { from { opacity: .35; } to { opacity: 1; } }
+  /* Glanz-Streifen, der ab und zu über die Torte wischt */
+  #pie-gloss {
+    position: absolute; inset: 1%; border-radius: 50%; overflow: hidden;
+    pointer-events: none; z-index: 3;
+  }
+  #pie-gloss::before {
+    content: ''; position: absolute; top: -20%; left: 0; width: 30%; height: 140%;
+    background: linear-gradient(100deg, transparent, rgba(255,255,255,.09) 45%, rgba(255,255,255,.14) 50%, rgba(255,255,255,.09) 55%, transparent);
+    transform: translateX(-130%) skewX(-20deg);
+    animation: shine 9s ease-in-out 4s infinite;
+  }
+  /* Schwebende "+12"-Labels */
+  #pie-labels { position: absolute; inset: 0; pointer-events: none; z-index: 4; }
+  .float-label {
+    position: absolute; left: 0; top: 0;
+    font-family: 'DM Mono', monospace; font-weight: 500; font-size: 1.35rem; white-space: nowrap;
+    color: var(--c); text-shadow: 0 0 14px var(--c), 0 2px 0 #0f0e17, 0 0 3px #0f0e17;
+    animation: floatLabel 1.05s var(--ease-out) forwards;
+  }
+  .float-label.big { font-size: 1.9rem; }
+  @keyframes floatLabel {
+    0%   { opacity: 0; transform: translate(-50%, -30%) scale(.4); }
+    14%  { opacity: 1; transform: translate(-50%, -65%) scale(1.3); }
+    30%  { transform: translate(-50%, -80%) scale(1); }
+    100% { opacity: 0; transform: translate(-50%, -210%) scale(.95); }
+  }
+  /* SVG-Details der Torte */
+  .pie-slice { cursor: pointer; }
+  .medal-pop { transform-box: fill-box; transform-origin: center; animation: medalPop .6s var(--spring); }
+  @keyframes medalPop { 0% { transform: scale(0) rotate(-90deg); } 100% { transform: none; } }
+  .cry-wobble { transform-box: fill-box; transform-origin: center; animation: cry 1.2s ease-in-out infinite; }
+  @keyframes cry { 0%,100% { transform: rotate(-9deg); } 50% { transform: rotate(9deg) translateY(1px); } }
+  .arrow-bob { animation: arrowBob 1.3s ease-in-out infinite alternate; }
+  @keyframes arrowBob { from { transform: translateY(-3px); } to { transform: translateY(2px); } }
 
   /* Input bar */
   #input-bar {
@@ -182,19 +442,31 @@
     display: flex; align-items: center;
     padding: 0 0.75rem;
     gap: 0.6rem;
+    position: relative;
   }
+  #input-bar::before { /* feine Linie in Spielerfarbe */
+    content: ''; position: absolute; left: 0; right: 0; top: -1px; height: 2px;
+    background: linear-gradient(90deg, transparent, var(--pc), transparent);
+    opacity: 0; transition: opacity .4s, background .4s;
+  }
+  #input-bar.has-player::before { opacity: .9; }
 
   #active-chip {
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     min-width: 52px; max-width: 64px;
     background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
     padding: 0.25rem 0.45rem; gap: 1px; height: 44px; cursor: pointer;
-    transition: border-color 0.15s; flex-shrink: 0;
+    transition: border-color 0.3s, box-shadow .3s; flex-shrink: 0;
   }
+  #active-chip.flip { animation: chipFlip .5s var(--spring); }
+  @keyframes chipFlip { 0% { transform: perspective(300px) rotateX(-100deg) scale(.9); opacity: .2; } 100% { transform: none; opacity: 1; } }
   #chip-name { font-size: 0.55rem; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60px; }
-  #chip-score { font-family: 'DM Mono', monospace; font-size: 1.05rem; font-weight: 500; line-height: 1; }
+  #chip-score { font-family: 'DM Mono', monospace; font-size: 1.05rem; font-weight: 500; line-height: 1; display: inline-block; }
+  #chip-score.bump { animation: numBump .4s var(--spring); }
 
   #no-player-hint { flex: 1; text-align: center; color: var(--muted); font-size: 0.78rem; letter-spacing: 1px; font-family: 'DM Mono', monospace; }
+  #no-player-hint .nudge { display: inline-block; animation: nudgeUp 1.2s ease-in-out infinite; color: var(--accent); }
+  @keyframes nudgeUp { 0%,100% { transform: translateY(2px); } 50% { transform: translateY(-4px); } }
 
   #delta-input {
     flex: 1; min-width: 0;
@@ -204,9 +476,10 @@
     font-family: 'DM Mono', monospace; font-size: 1.25rem; font-weight: 500;
     padding: 0 0.75rem; height: 44px;
     text-align: center; outline: none;
-    transition: border-color 0.15s;
+    transition: border-color 0.3s, box-shadow .3s;
   }
-  #delta-input:focus { border-color: var(--accent); }
+  #delta-input:focus { box-shadow: 0 0 0 3px var(--pc-a), 0 0 18px -4px var(--pc); }
+  #delta-input.shake { animation: shakeX .35s ease-in-out; }
 
   #sub-btn {
     height: 44px; flex-shrink: 0;
@@ -214,151 +487,523 @@
     color: var(--text); font-family: 'Syne', sans-serif;
     font-size: 0.85rem; font-weight: 800;
     padding: 0 0.75rem; cursor: pointer; white-space: nowrap;
-    letter-spacing: 0.5px; transition: all 0.12s;
+    letter-spacing: 0.5px; transition: transform .25s var(--spring), background .15s, border-color .15s;
   }
-  #sub-btn.confirm { background: #e84040; border-color: #e84040; color: #fff; }
+  #sub-btn:active { transform: scale(.93); }
+  #sub-btn.confirm { background: #e84040; border-color: #e84040; color: #fff; animation: shakeX .35s ease-in-out; }
+  #sub-btn.confirm::after { /* Countdown-Balken fürs Bestätigen */
+    content: ''; position: absolute; left: 0; bottom: 0; height: 3px; width: 100%;
+    background: rgba(255,255,255,.75); transform-origin: left;
+    animation: drain 2s linear forwards;
+  }
+  @keyframes drain { from { transform: scaleX(1); } to { transform: scaleX(0); } }
   #add-btn {
     height: 44px; flex-shrink: 0;
-    background: var(--accent); border: none; border-radius: 10px;
+    background: var(--pc); border: none; border-radius: 10px;
     color: #fff; font-family: 'Syne', sans-serif;
-    font-size: 0.85rem; font-weight: 800;
+    font-size: 0.85rem; font-weight: 800; text-shadow: 0 1px 2px rgba(0,0,0,.35);
     padding: 0 0.9rem; cursor: pointer; white-space: nowrap;
-    letter-spacing: 0.5px; transition: opacity 0.12s, transform 0.12s;
+    letter-spacing: 0.5px;
+    box-shadow: 0 6px 18px -8px var(--pc);
+    transition: transform .25s var(--spring), background .3s, box-shadow .3s;
   }
-  #add-btn:active { opacity: 0.85; transform: scale(0.96); }
-
-
-
+  #add-btn::after {
+    content: ''; position: absolute; top: 0; left: 0; width: 45%; height: 100%; pointer-events: none;
+    background: linear-gradient(100deg, transparent, rgba(255,255,255,.35), transparent);
+    transform: translateX(-130%) skewX(-20deg);
+    animation: shine 4.5s ease-in-out 2s infinite;
+  }
+  #add-btn:active { transform: scale(0.92); }
+</style>
+<style>
   /* ===== HISTORY PANEL ===== */
   #history-panel {
     position: fixed; bottom: 0; left: 0; right: 0;
     background: var(--surface); border-top: 1px solid var(--border);
-    border-radius: 20px 20px 0 0; max-height: 65vh; overflow-y: auto;
-    transform: translateY(100%);
-    transition: transform 0.28s cubic-bezier(0.32,0.72,0,1);
+    border-radius: 22px 22px 0 0; max-height: 65vh; overflow-y: auto;
+    transform: translateY(105%);
+    transition: transform 0.4s var(--ease-out);
     z-index: 200; padding: 1rem;
+    box-shadow: 0 -20px 50px -20px rgba(0,0,0,.8);
   }
   #history-panel.open { transform: translateY(0); }
-  .panel-handle { width: 40px; height: 4px; background: var(--border); border-radius: 2px; margin: 0 auto 1rem; }
+  .panel-handle { width: 40px; height: 4px; background: var(--border-hi); border-radius: 2px; margin: 0 auto 1rem; }
   .panel-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
   .panel-header h3 { font-size: 0.8rem; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); }
-  .undo-btn { background: transparent; border: 1px solid var(--border); border-radius: 8px; color: var(--accent); font-family: 'Syne', sans-serif; font-size: 0.75rem; font-weight: 700; padding: 0.35rem 0.8rem; cursor: pointer; }
+  .undo-btn {
+    background: transparent; border: 1px solid var(--border); border-radius: 8px; color: var(--accent);
+    font-family: 'Syne', sans-serif; font-size: 0.75rem; font-weight: 700; padding: 0.35rem 0.8rem; cursor: pointer;
+    transition: transform .25s var(--spring);
+  }
+  .undo-btn:active { transform: scale(.92); }
   .undo-btn:disabled { opacity: 0.3; cursor: default; }
   .history-list { display: flex; flex-direction: column; gap: 0.5rem; }
-  .history-item { display: flex; align-items: center; justify-content: space-between; padding: 0.65rem 0.9rem; background: var(--bg); border-radius: 10px; }
+  .history-item {
+    display: flex; align-items: center; justify-content: space-between; padding: 0.65rem 0.9rem;
+    background: var(--bg); border-radius: 10px; border-left: 3px solid var(--c, var(--border));
+  }
+  #history-panel.open .history-item { animation: fadeUp .38s var(--ease-out) both; animation-delay: calc(var(--i) * 35ms + 80ms); }
+  .history-item.latest { background: linear-gradient(90deg, var(--ca, transparent), var(--bg) 70%); }
   .hist-player { font-weight: 700; font-size: 0.78rem; letter-spacing: 1px; text-transform: uppercase; }
   .hist-round { font-size: 0.62rem; color: var(--muted); font-family: 'DM Mono', monospace; }
   .hist-delta { font-family: 'DM Mono', monospace; font-size: 0.85rem; color: #4ecdc4; }
   .hist-delta.neg { color: #ff6b6b; }
   .empty-history { text-align: center; color: var(--muted); font-size: 0.85rem; padding: 2rem; font-family: 'DM Mono', monospace; }
 
-  #overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 150; display: none; backdrop-filter: blur(2px); }
-  #overlay.active { display: block; }
+  #overlay {
+    position: fixed; inset: 0; background: rgba(6,5,14,0.6); z-index: 150;
+    opacity: 0; visibility: hidden; backdrop-filter: blur(2px);
+    transition: opacity .28s, visibility 0s .28s;
+  }
+  #overlay.active { opacity: 1; visibility: visible; transition: opacity .28s; }
 
-  #reset-modal { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; z-index: 300; padding: 1.5rem; }
-  #reset-modal.open { display: flex; }
-  .modal-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 2rem; max-width: 300px; width: 100%; text-align: center; display: flex; flex-direction: column; gap: 1.2rem; }
+  /* ===== MODALS ===== */
+  .modal-wrap { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; z-index: 300; padding: 1.5rem; pointer-events: none; }
+  .modal-wrap.open { display: flex; }
+  .modal-wrap.open > * { pointer-events: auto; animation: cardPop .45s var(--spring) both; }
+  .modal-wrap.closing > * { animation: cardOut .18s ease-in forwards; pointer-events: none; }
+  .modal-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 2rem; max-width: 300px; width: 100%; text-align: center;
+    display: flex; flex-direction: column; gap: 1.2rem;
+    box-shadow: 0 30px 70px -20px rgba(0,0,0,.85);
+  }
   .modal-card h3 { font-size: 1.2rem; font-weight: 800; }
   .modal-card p { color: var(--muted); font-size: 0.9rem; }
   .modal-actions { display: flex; gap: 0.75rem; }
-  .modal-actions button { flex: 1; padding: 0.85rem; border-radius: 12px; border: none; font-family: 'Syne', sans-serif; font-size: 0.9rem; font-weight: 800; cursor: pointer; }
+  .modal-actions button {
+    flex: 1; padding: 0.85rem; border-radius: 12px; border: none; font-family: 'Syne', sans-serif;
+    font-size: 0.9rem; font-weight: 800; cursor: pointer; transition: transform .25s var(--spring);
+  }
+  .modal-actions button:active { transform: scale(.95); }
   .btn-cancel { background: var(--bg); color: var(--text); border: 1px solid var(--border) !important; }
   .btn-confirm { background: var(--accent); color: white; }
+  .btn-newgame {
+    padding: 0.85rem; border-radius: 12px; border: 1px dashed var(--border);
+    background: var(--bg); color: var(--muted); font-family: 'Syne', sans-serif;
+    font-size: 0.85rem; font-weight: 700; cursor: pointer; width: 100%;
+  }
+  .addp-input {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 10px; color: var(--text);
+    font-family: 'Syne', sans-serif; font-size: 0.95rem; font-weight: 700; padding: 0.55rem 0.8rem;
+    outline: none; width: 100%; transition: border-color 0.2s;
+  }
+  .addp-input:focus { border-color: var(--accent); }
+  .addp-input::placeholder { color: var(--muted); font-weight: 400; }
+  .addp-color-row {
+    display: flex; align-items: center; gap: .7rem; color: var(--muted); font-size: 0.8rem;
+    font-family: 'DM Mono', monospace; cursor: pointer; background: var(--bg);
+    border: 1px solid var(--border); border-radius: 10px; padding: .45rem .6rem;
+  }
+  .addp-color-row .color-swatch { width: 30px; height: 30px; }
+  .addp-color-row .hex { flex: 1; text-align: right; color: var(--text); letter-spacing: 1px; }
 
-  /* ===== SIEGEREHRUNG-MODAL ===== */
-  #sieger-modal { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; z-index: 300; padding: 1.5rem; }
-  #sieger-modal.open { display: flex; }
+  /* ===== SIEGEREHRUNG ===== */
   .sieger-card {
+    position: relative; overflow: hidden;
     background: var(--surface); border: 1px solid var(--border);
     border-radius: var(--radius); padding: 2rem 1.5rem 1.5rem;
     max-width: 340px; width: 100%; text-align: center;
     display: flex; flex-direction: column; gap: 1.4rem;
+    box-shadow: 0 30px 70px -20px rgba(0,0,0,.85);
   }
-  .sieger-title { font-size: 1.3rem; font-weight: 800; letter-spacing: -0.5px; }
+  .sieger-title { position: relative; font-size: 1.3rem; font-weight: 800; letter-spacing: -0.5px; }
+  .sieger-title .shimmer {
+    background: linear-gradient(90deg, #f7c948, #fff6d5, #f7c948, #e0a526, #f7c948);
+    background-size: 250% 100%; -webkit-background-clip: text; background-clip: text; color: transparent;
+    animation: shimmer 3s linear infinite;
+  }
+  @keyframes shimmer { to { background-position: -250% 0; } }
   /* Podium: drei Spalten, mittlere (Gold) ist erhöht */
   .podium-wrap {
+    position: relative;
     display: flex; align-items: flex-end; justify-content: center;
-    gap: 0.5rem; height: 120px;
+    gap: 0.5rem; height: 130px;
+  }
+  .podium-rays {
+    position: absolute; left: 50%; top: 20%; width: 260px; height: 260px; margin: -130px 0 0 -130px;
+    border-radius: 50%; pointer-events: none;
+    background: repeating-conic-gradient(from 0deg, rgba(247,201,72,.2) 0deg 9deg, transparent 9deg 18deg);
+    -webkit-mask-image: radial-gradient(circle, #000 12%, transparent 68%);
+    mask-image: radial-gradient(circle, #000 12%, transparent 68%);
+    animation: spin 16s linear infinite, fadeIn 1s ease-out .6s both;
   }
   .podium-slot {
+    position: relative;
     display: flex; flex-direction: column; align-items: center;
-    justify-content: flex-end; gap: 4px; flex: 1;
+    justify-content: flex-end; gap: 4px; flex: 1; min-width: 0;
   }
   .podium-name {
     font-size: 0.72rem; font-weight: 800; letter-spacing: 0.5px;
     text-transform: uppercase; white-space: nowrap;
-    overflow: hidden; text-overflow: ellipsis; max-width: 90px;
+    overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+    animation: fadeUp .5s var(--ease-out) both; animation-delay: calc(var(--d) + .35s);
   }
-  .podium-score {
-    font-family: 'DM Mono', monospace; font-size: 0.65rem; color: var(--muted);
-  }
-  .podium-medal { font-size: 1.8rem; line-height: 1; }
+  .podium-score { font-family: 'DM Mono', monospace; font-size: 0.65rem; color: var(--muted); animation: fadeIn .4s both; animation-delay: calc(var(--d) + .4s); }
+  .podium-medal { font-size: 1.8rem; line-height: 1; animation: medalDrop .75s var(--spring) both; animation-delay: calc(var(--d) + .25s); }
+  @keyframes medalDrop { 0% { opacity: 0; transform: translateY(-70px) scale(.3) rotate(-40deg); } 100% { opacity: 1; transform: none; } }
   .podium-block {
     width: 100%; border-radius: 8px 8px 0 0;
     display: flex; align-items: center; justify-content: center;
     font-family: 'DM Mono', monospace; font-size: 0.75rem; font-weight: 700;
-    color: rgba(0,0,0,0.5); padding-top: 4px;
+    color: rgba(0,0,0,0.5); padding-top: 4px; transform-origin: bottom;
+    animation: rise .7s var(--spring) both; animation-delay: var(--d);
+    box-shadow: inset 0 2px 0 rgba(255,255,255,.4);
   }
-  .podium-block.gold   { background: #f7c948; height: 70px; }
-  .podium-block.silver { background: #b8c0cc; height: 50px; }
-  .podium-block.bronze { background: #cd7f32; height: 36px; }
+  @keyframes rise { from { transform: scaleY(0); } }
+  .podium-block.gold   { background: linear-gradient(180deg, #ffe07a, #f7c948 40%, #d9a520); height: 70px; }
+  .podium-block.silver { background: linear-gradient(180deg, #e3e8ef, #b8c0cc 45%, #939cab); height: 50px; }
+  .podium-block.bronze { background: linear-gradient(180deg, #e6a468, #cd7f32 45%, #a8621f); height: 36px; }
   /* Reihenfolge: Silber links, Gold mitte, Bronze rechts */
   .podium-wrap .slot-silver { order: 1; }
   .podium-wrap .slot-gold   { order: 2; }
   .podium-wrap .slot-bronze { order: 3; }
-
   .sieger-modal-actions { display: flex; gap: 0.75rem; }
   .sieger-modal-actions button { flex: 1; padding: 0.85rem; border-radius: 12px; border: none; font-family: 'Syne', sans-serif; font-size: 0.9rem; font-weight: 800; cursor: pointer; }
 
-  .toast { position: fixed; top: calc(var(--topbar) + 6px); left: 50%; transform: translateX(-50%) translateY(-6px); background: var(--surface); border: 1px solid var(--border); border-radius: 100px; color: var(--text); font-size: 0.78rem; font-weight: 700; padding: 0.5rem 1rem; opacity: 0; transition: all 0.22s; z-index: 500; white-space: nowrap; }
-  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  /* ===== TOAST ===== */
+  .toast {
+    position: fixed; top: calc(var(--topbar) + 6px); left: 50%;
+    transform: translateX(-50%) translateY(-14px) scale(.9);
+    background: rgba(26,25,40,.96); border: 1px solid var(--border-hi); border-radius: 100px; color: var(--text);
+    font-size: 0.78rem; font-weight: 700; padding: 0.5rem 1rem; opacity: 0; z-index: 500; white-space: nowrap;
+    display: flex; align-items: center; gap: .5rem; pointer-events: none;
+    box-shadow: 0 10px 30px -10px rgba(0,0,0,.8);
+    transition: opacity .22s, transform .45s var(--spring);
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+  .toast .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--c); box-shadow: 0 0 8px var(--c); }
 
-  #confetti-canvas { position: fixed; inset: 0; pointer-events: none; z-index: 999; }
+  #fx-canvas { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 999; }
+</style>
+<style>
+  /* ===== STATISTIK-SCREEN ===== */
+  /* display:block statt flex → Kinder werden nicht mehr zusammengestaucht
+     (das hat vorher die Zeitraum-Reiter abgeschnitten) */
+  #stats-screen {
+    position: fixed; inset: 0; display: none;
+    background: radial-gradient(120% 60% at 50% -10%, rgba(255,107,53,.09), transparent 60%), var(--bg);
+    z-index: 20; overflow-y: auto; overflow-x: hidden;
+  }
+  #stats-screen.open { display: block; animation: slideInR .42s var(--ease-out); }
+  #stats-screen.closing { animation: slideOutR .26s ease-in forwards; pointer-events: none; }
+  @keyframes slideInR { from { transform: translateX(40%); opacity: 0; } }
+  @keyframes slideOutR { to { transform: translateX(40%); opacity: 0; } }
+  .stats-topbar {
+    position: sticky; top: 0; background: var(--bg); z-index: 5;
+    display: flex; align-items: center; gap: 0.8rem;
+    padding: calc(0.9rem + env(safe-area-inset-top, 0px)) 1rem 0.8rem; border-bottom: 1px solid var(--border);
+  }
+  .stats-back {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; color: var(--text);
+    width: 36px; height: 36px; cursor: pointer; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    transition: transform .25s var(--spring);
+  }
+  .stats-back:active { transform: scale(.88); }
+  .stats-back svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+  .stats-title { font-size: 1.1rem; font-weight: 800; letter-spacing: -0.5px; }
+  .stats-title span { color: var(--accent); }
+
+  /* Zeitraum-Umschalter: 4 gleich breite Felder, passen immer auf den Screen */
+  .seg {
+    position: relative; display: grid; grid-template-columns: repeat(4, 1fr);
+    margin: 1rem 1rem 0.3rem; padding: 4px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+  }
+  .seg-ind {
+    position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc((100% - 8px) / 4);
+    border-radius: 10px; background: linear-gradient(135deg, #ff8a4d, var(--accent));
+    box-shadow: 0 4px 14px -4px rgba(255,107,53,.8);
+    transform: translateX(calc(var(--k, 0) * 100%));
+    transition: transform .45s var(--spring);
+  }
+  .fchip {
+    position: relative; z-index: 1; background: none; border: none; cursor: pointer;
+    color: var(--muted); font-family: 'DM Mono', monospace; font-size: 0.78rem; font-weight: 500;
+    padding: 0.62rem 0; white-space: nowrap; line-height: 1.2;
+    transition: color .25s;
+  }
+  .fchip.active { color: #fff; font-weight: 700; }
+
+  /* Kennzahlen */
+  .kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.6rem; margin: 0.8rem 1rem 0; }
+  .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 0.7rem 0.5rem; text-align: center; min-width: 0; }
+  .kpi-val { font-family: 'DM Mono', monospace; font-size: 1.35rem; font-weight: 500; line-height: 1.1; }
+  .kpi-lbl { font-size: 0.56rem; letter-spacing: 1.2px; text-transform: uppercase; color: var(--muted); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #stats-screen.open .kpi { animation: cardPop .5s var(--ease-out) both; animation-delay: calc(var(--i) * 60ms + 60ms); }
+  #stats-screen.open .kpis.static .kpi { animation: none; }
+
+  /* Stat-Karten */
+  .stat-card {
+    margin: 0.8rem 1rem; background: var(--surface);
+    border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 1rem;
+  }
+  #stats-screen.open .stat-card { animation: cardPop .55s var(--ease-out) both; animation-delay: calc(var(--i) * 70ms + 150ms); }
+  .stat-card-title {
+    font-size: 0.7rem; font-weight: 700; letter-spacing: 1.6px;
+    text-transform: uppercase; color: var(--muted);
+    margin-bottom: 1rem; font-family: 'DM Mono', monospace;
+    display: flex; align-items: baseline; justify-content: space-between; gap: .5rem;
+  }
+  .stat-card-title .sub { font-size: 0.6rem; letter-spacing: .5px; text-transform: none; color: #5d5c78; white-space: nowrap; }
+  .empty-stats {
+    text-align: center; color: var(--muted);
+    font-family: 'DM Mono', monospace; font-size: 0.85rem;
+    padding: 1.5rem 0;
+  }
+  .chart { width: 100%; }
+  .chart svg { display: block; overflow: visible; }
+
+  /* Diagramm-Animationen (nur beim Zeitraum-Wechsel / Öffnen) */
+  .a-line { animation: drawLine 1.2s var(--ease-out) backwards; animation-delay: var(--d, 0s); }
+  @keyframes drawLine { from { stroke-dasharray: 1 1; stroke-dashoffset: 1; } to { stroke-dasharray: 1 1; stroke-dashoffset: 0; } }
+  .a-pop { transform-box: fill-box; transform-origin: center; animation: popIn .45s var(--spring) backwards; animation-delay: var(--d, 0s); }
+  .a-grow { transform-box: fill-box; transform-origin: left center; animation: growX .8s var(--ease-out) backwards; animation-delay: var(--d, 0s); }
+  @keyframes growX { from { transform: scaleX(0); } }
+  .a-fade { animation: fadeIn .5s ease-out backwards; animation-delay: var(--d, 0s); }
+
+  /* Podium in Stats (kompakter als Siegerehrung) */
+  .stats-podium { display: flex; align-items: flex-end; justify-content: center; gap: 0.4rem; height: 104px; }
+  .sp-slot { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 3px; flex: 1; min-width: 0; }
+  .sp-name { font-size: 0.66rem; font-weight: 800; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+  .sp-val  { font-family: 'DM Mono', monospace; font-size: 0.6rem; color: var(--muted); white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+  .sp-emoji { font-size: 1.4rem; line-height: 1; }
+  .sp-block { width: 100%; border-radius: 6px 6px 0 0; display: flex; align-items: center; justify-content: center; font-size: 0.65rem; font-weight: 700; color: rgba(0,0,0,0.5); transform-origin: bottom; box-shadow: inset 0 2px 0 rgba(255,255,255,.35); }
+  .sp-block.gold   { background: linear-gradient(180deg, #ffe07a, #f7c948 40%, #d9a520); height: 55px; }
+  .sp-block.silver { background: linear-gradient(180deg, #e3e8ef, #b8c0cc 45%, #939cab); height: 38px; }
+  .sp-block.bronze { background: linear-gradient(180deg, #e6a468, #cd7f32 45%, #a8621f); height: 26px; }
+  .sp-slot.ss { order: 1; } .sp-slot.sg { order: 2; } .sp-slot.sb { order: 3; }
+  .stats-podium.anim .sp-block { animation: rise .65s var(--spring) backwards; animation-delay: var(--d); }
+  .stats-podium.anim .sp-emoji { animation: medalDrop .7s var(--spring) backwards; animation-delay: calc(var(--d) + .2s); }
+  .stats-podium.anim .sp-name, .stats-podium.anim .sp-val { animation: fadeUp .45s var(--ease-out) backwards; animation-delay: calc(var(--d) + .3s); }
+
+  /* Linien-Legenden-Toggle */
+  .line-legend { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.9rem; }
+  .legend-chip {
+    display: flex; align-items: center; gap: 0.3rem;
+    border-radius: 100px; padding: 0.3rem 0.65rem;
+    border: 1px solid var(--border); cursor: pointer; background: var(--bg);
+    font-size: 0.68rem; font-weight: 700; letter-spacing: 0.5px;
+    transition: opacity 0.2s, transform .25s var(--spring); user-select: none; -webkit-user-select: none;
+  }
+  .legend-chip:active { transform: scale(.92); }
+  .legend-chip.off { opacity: 0.3; }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+  /* Heatmap */
+  .heatmap-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .hm-legend { display: flex; align-items: center; justify-content: flex-end; gap: 3px; margin-top: .6rem; font-family: 'DM Mono', monospace; font-size: .58rem; color: var(--muted); }
+  .hm-legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+  .hm-legend span { margin: 0 4px; }
+
+  /* Letzter Abstand unten damit der Homeindikator nichts verdeckt */
+  .stats-bottom-pad { height: calc(2rem + env(safe-area-inset-bottom, 0px)); }
+
+  /* ===== COLOR-PICKER (Farbfeld + Farbton-Regler) ===== */
+  .cp-wrap { position: fixed; inset: 0; z-index: 700; display: none; align-items: flex-end; justify-content: center; }
+  .cp-wrap.open { display: flex; }
+  .cp-backdrop { position: absolute; inset: 0; background: rgba(6,5,14,.62); animation: fadeIn .25s both; }
+  .cp-card {
+    position: relative; width: 100%; max-width: 440px;
+    background: var(--surface); border: 1px solid var(--border); border-bottom: none;
+    border-radius: 24px 24px 0 0;
+    padding: 0.8rem 1.1rem calc(1.1rem + env(safe-area-inset-bottom, 0px));
+    display: flex; flex-direction: column; gap: 0.9rem;
+    box-shadow: 0 -24px 60px -20px rgba(0,0,0,.9);
+    animation: sheetUp .45s var(--ease-out) both;
+  }
+  .cp-wrap.closing .cp-card { animation: sheetDown .22s ease-in forwards; }
+  .cp-wrap.closing .cp-backdrop { animation: fadeOut .22s forwards; }
+  .cp-wrap.closing { pointer-events: none; }
+  @keyframes sheetUp { from { transform: translateY(100%); } }
+  @keyframes sheetDown { to { transform: translateY(100%); } }
+  @keyframes fadeOut { to { opacity: 0; } }
+  .cp-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+  .cp-head h3 { font-size: 0.8rem; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); }
+  .cp-preview { display: flex; align-items: center; gap: .6rem; }
+  .cp-hex { font-family: 'DM Mono', monospace; font-size: .85rem; letter-spacing: 1px; }
+  .cp-dots { position: relative; width: 52px; height: 32px; }
+  .cp-dots i { position: absolute; top: 0; width: 32px; height: 32px; border-radius: 50%; border: 2px solid var(--surface); }
+  .cp-dots .old { left: 0; background: var(--old); }
+  .cp-dots .new { right: 0; background: var(--c); box-shadow: 0 0 16px -2px var(--c); transition: box-shadow .2s; }
+  .cp-main { display: flex; gap: 0.8rem; height: min(56vw, 240px); }
+  .cp-sv {
+    position: relative; flex: 1; border-radius: 16px; touch-action: none; cursor: crosshair;
+    background-color: hsl(var(--h, 0), 100%, 50%);
+    background-image: linear-gradient(to top, #000, rgba(0,0,0,0)), linear-gradient(to right, #fff, rgba(255,255,255,0));
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.08);
+  }
+  .cp-hue {
+    position: relative; width: 38px; border-radius: 14px; touch-action: none; cursor: pointer; flex-shrink: 0;
+    background: linear-gradient(to bottom, #f00 0%, #ff0 16.66%, #0f0 33.33%, #0ff 50%, #00f 66.66%, #f0f 83.33%, #f00 100%);
+  }
+  .cp-sv-thumb {
+    position: absolute; left: 0; top: 0; width: 28px; height: 28px; margin: -14px 0 0 -14px;
+    border-radius: 50%; border: 3px solid #fff; background: var(--c); pointer-events: none;
+    box-shadow: 0 0 0 1px rgba(0,0,0,.3), 0 4px 12px rgba(0,0,0,.55);
+    transition: transform .25s var(--spring);
+  }
+  .cp-sv.dragging .cp-sv-thumb { transform: scale(1.35); }
+  .cp-hue-thumb {
+    position: absolute; left: -5px; right: -5px; top: 0; height: 16px; margin-top: -8px;
+    border-radius: 9px; border: 3px solid #fff; background: hsl(var(--h, 0), 100%, 50%); pointer-events: none;
+    box-shadow: 0 0 0 1px rgba(0,0,0,.3), 0 3px 10px rgba(0,0,0,.55);
+    transition: transform .25s var(--spring);
+  }
+  .cp-hue.dragging .cp-hue-thumb { transform: scaleX(1.12) scaleY(1.25); }
+  .cp-warn { font-family: 'DM Mono', monospace; font-size: .66rem; color: #ffb36b; min-height: 1em; margin-top: -.4rem; transition: opacity .2s; }
+  .cp-presets { display: grid; grid-template-columns: repeat(8, 1fr); gap: 8px; }
+  .cp-sw {
+    aspect-ratio: 1 / 1; border-radius: 10px; border: 2px solid transparent; background: var(--c);
+    position: relative; cursor: pointer; transition: transform .25s var(--spring), border-color .2s;
+  }
+  .cp-sw:active { transform: scale(.85); }
+  .cp-sw.sel { border-color: #fff; transform: scale(1.12); box-shadow: 0 0 14px -2px var(--c); }
+  .cp-sw.used::after { content: ''; position: absolute; right: 3px; bottom: 3px; width: 6px; height: 6px; border-radius: 50%; background: rgba(15,14,23,.8); }
+  .cp-hint { font-family: 'DM Mono', monospace; font-size: .6rem; color: #5d5c78; margin-top: -.45rem; }
 </style>
 </head>
-<body>
+<body data-screen="setup">
+
+<!-- Bewegter Hintergrund -->
+<div class="ambient" aria-hidden="true">
+  <div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div>
+  <div class="float-cards" id="floatCards"></div>
+</div>
 
 <!-- SETUP -->
 <div id="setup">
-  <div class="logo">FLIP<span>7</span></div>
-  <div class="tagline">Score Tracker</div>
-  <div class="setup-card">
-    <h2>Anzahl Spieler</h2>
-    <div class="player-count-row">
-      <button class="count-btn" id="decBtn">−</button>
-      <div id="playerCount">3</div>
-      <button class="count-btn" id="incBtn">+</button>
+  <div class="setup-inner enter" id="setupInner">
+    <div class="logo" aria-label="Flip 7">
+      <span class="lt" style="--i:0">F</span><span class="lt" style="--i:1">L</span><span class="lt" style="--i:2">I</span><span class="lt" style="--i:3">P</span>
+      <span class="seven-wrap"><span class="seven">7</span></span>
     </div>
-    <h2>Namen</h2>
-    <div class="names-list" id="namesList"></div>
-    <div class="mode-row" onclick="toggleSchnell()">
-      <input type="checkbox" id="schnellrunde" onclick="event.stopPropagation();toggleSchnell()">
-      <div class="mode-label">
-        <strong>⚡ Punkteziel</strong>
-        <span>Standard: 200 Punkte</span>
+    <div class="tagline">Score Tracker</div>
+    <div class="setup-card">
+      <h2>Anzahl Spieler:innen</h2>
+      <div class="player-count-row">
+        <button class="count-btn" id="decBtn">−</button>
+        <div id="playerCount">3</div>
+        <button class="count-btn" id="incBtn">+</button>
       </div>
-      <input type="number" id="zielpunkte" inputmode="numeric" placeholder="200"
-        style="display:none;width:72px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'DM Mono',monospace;font-size:1rem;font-weight:700;padding:0.4rem 0.5rem;text-align:center;outline:none;flex-shrink:0;"
-        onclick="event.stopPropagation()" min="1" max="99999">
+      <h2>Namen</h2>
+      <div class="names-list" id="namesList"></div>
+      <label class="mode-row" for="schnellrunde">
+        <div class="mode-label">
+          <strong>⚡ Punkteziel</strong>
+          <span id="zielLabel">Standard: 200 Punkte</span>
+        </div>
+        <input type="number" id="zielpunkte" inputmode="numeric" placeholder="200" min="1" max="99999">
+        <input type="checkbox" class="switch" id="schnellrunde">
+      </label>
+      <label class="mode-row" for="animOff">
+        <div class="mode-label">
+          <strong>✨ Animationen ausschalten</strong>
+          <span>Nur das Sieg-Konfetti bleibt</span>
+        </div>
+        <input type="checkbox" class="switch" id="animOff">
+      </label>
+      <button class="start-btn rip" id="startBtn">SPIEL STARTEN <span class="arr">→</span></button>
+      <button class="ghost-btn" id="statsBtn">
+        <svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
+        Statistik
+      </button>
     </div>
-    <button class="start-btn" id="startBtn">SPIEL STARTEN →</button>
   </div>
+</div>
+
+<!-- ===== STATISTIK-SCREEN ===== -->
+<div id="stats-screen">
+  <div class="stats-topbar">
+    <button class="stats-back" id="statsBackBtn" aria-label="Zurück">
+      <svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
+    </button>
+    <div class="stats-title">FLIP<span>7</span> · STATISTIK</div>
+  </div>
+  <div class="seg" id="filterChips">
+    <div class="seg-ind"></div>
+    <button class="fchip active" data-days="7">7 Tage</button>
+    <button class="fchip" data-days="30">30 Tage</button>
+    <button class="fchip" data-days="90">3 Monate</button>
+    <button class="fchip" data-days="0">Alles</button>
+  </div>
+
+  <div class="kpis" id="sc-kpis"></div>
+
+  <!-- Karte 1: Podium -->
+  <div class="stat-card" style="--i:0">
+    <div class="stat-card-title">🏅 Top-Spieler:innen <span class="sub">nach Goldmedaillen</span></div>
+    <div id="sc-podium"></div>
+  </div>
+
+  <!-- Karte 2: Punkte-Verlauf -->
+  <div class="stat-card" style="--i:1">
+    <div class="stat-card-title">📈 Kumulierte Punkte <span class="sub">im Zeitraum</span></div>
+    <div id="sc-linechart" class="chart"></div>
+    <div class="line-legend" id="sc-legend"></div>
+  </div>
+
+  <!-- Karte 3: Medaillen-Balken -->
+  <div class="stat-card" style="--i:2">
+    <div class="stat-card-title">🥇 Medaillen-Verteilung <span class="sub">🥇·🥈·🥉</span></div>
+    <div id="sc-medals" class="chart"></div>
+  </div>
+
+  <!-- Karte 4: Durchschnittspunkte -->
+  <div class="stat-card" style="--i:3">
+    <div class="stat-card-title">📊 Ø Punkte pro Spiel <span class="sub">Ø · Anzahl</span></div>
+    <div id="sc-avg" class="chart"></div>
+  </div>
+
+  <!-- Karte 5: Aktivitäts-Heatmap -->
+  <div class="stat-card" style="--i:4">
+    <div class="stat-card-title">📅 Spielaktivität <span class="sub" id="hm-sub"></span></div>
+    <div class="heatmap-wrap chart"><div id="sc-heatmap"></div></div>
+  </div>
+
+  <div class="stats-bottom-pad"></div>
 </div>
 
 <!-- GAME -->
 <div id="game">
   <div class="top-bar">
-    <div class="game-title" id="back-to-setup" style="cursor:pointer" title="Zurück zur Namenseingabe">FLIP<span>7</span> <small id="mode-badge" style="display:none;font-size:0.6rem;color:var(--accent);letter-spacing:1px;vertical-align:middle;">⚡SCHNELL</small></div>
-    <div id="game-clock">00:00</div>
+    <div class="game-title">FLIP<span class="s7">7</span><small id="mode-badge">⚡SCHNELL</small></div>
+    <div id="game-clock">00<span class="colon">:</span>00</div>
     <div class="bar-actions">
-      <button class="icon-btn" id="siegerBtn" title="Siegerehrung">🏅</button>
-      <button class="icon-btn" id="historyBtn">📋</button>
-      <button class="icon-btn" id="resetBtn">🔄</button>
+      <button class="icon-btn" id="addPlayerBtn" title="Spieler:in hinzufügen" aria-label="Spieler:in hinzufügen">
+        <svg viewBox="0 0 24 24"><path d="M15 20v-1.5a4 4 0 0 0-4-4H6.5a4 4 0 0 0-4 4V20"/><circle cx="8.75" cy="7.5" r="3.75"/><path d="M19 8v6M22 11h-6"/></svg>
+      </button>
+      <button class="icon-btn" id="siegerBtn" title="Siegerehrung" aria-label="Siegerehrung">
+        <svg viewBox="0 0 24 24"><path d="M8 21h8M12 16.5V21M7 4h10v5a5 5 0 0 1-10 0V4z"/><path d="M17 5.5h2.5V7a3 3 0 0 1-3 3M7 5.5H4.5V7a3 3 0 0 0 3 3"/></svg>
+      </button>
+      <button class="icon-btn" id="historyBtn" title="Rundenhistorie" aria-label="Rundenhistorie">
+        <svg viewBox="0 0 24 24"><path d="M9 6h12M9 12h12M9 18h12"/><circle cx="4" cy="6" r="1.2"/><circle cx="4" cy="12" r="1.2"/><circle cx="4" cy="18" r="1.2"/></svg>
+      </button>
+      <button class="icon-btn" id="resetBtn" title="Zurücksetzen" aria-label="Zurücksetzen">
+        <svg viewBox="0 0 24 24"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1L3.5 8.5"/><path d="M3.5 3.5v5h5"/></svg>
+      </button>
     </div>
   </div>
 
   <div id="pie-wrap">
-    <svg id="pie-svg" viewBox="0 0 400 400"></svg>
+    <div id="pie-stage">
+      <canvas id="pie-halo"></canvas>
+      <svg id="pie-svg" viewBox="0 0 400 400"></svg>
+      <svg id="pie-glow" viewBox="0 0 400 400" aria-hidden="true">
+        <defs>
+          <filter id="glowBlur" x="-30%" y="-30%" width="160%" height="160%">
+            <feGaussianBlur stdDeviation="4" result="b"/>
+            <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+        <g id="glow-g" filter="url(#glowBlur)"><path id="glow-path" fill="none" stroke="#fff" stroke-width="3.5" stroke-linejoin="round"/></g>
+      </svg>
+      <div id="pie-gloss"></div>
+      <div id="pie-labels"></div>
+    </div>
   </div>
 
   <div id="input-bar">
@@ -366,10 +1011,10 @@
       <div id="chip-name">—</div>
       <div id="chip-score" style="color:var(--muted)">—</div>
     </div>
-    <span id="no-player-hint">← Spieler antippen</span>
+    <span id="no-player-hint"><span class="nudge">↑</span> Spieler:in antippen</span>
     <input id="delta-input" type="number" inputmode="numeric" placeholder="0" style="display:none">
-    <button id="add-btn" style="display:none">＋ ADD</button>
-    <button id="sub-btn" style="display:none">− SUB</button>
+    <button id="add-btn" class="rip" style="display:none">＋ ADD</button>
+    <button id="sub-btn" class="rip" style="display:none">− SUB</button>
   </div>
 </div>
 
@@ -384,28 +1029,73 @@
   <div class="history-list" id="historyList"></div>
 </div>
 
-<div id="sieger-modal">
+<div id="sieger-modal" class="modal-wrap">
   <div class="sieger-card">
-    <div class="sieger-title">🏅 Siegerehrung</div>
+    <div class="sieger-title">🏅 <span class="shimmer">Siegerehrung</span></div>
     <div class="podium-wrap" id="podium-wrap"></div>
     <div class="sieger-modal-actions">
-      <button class="btn-cancel" id="siegerClose">Schließen</button>
+      <button class="btn-cancel rip" id="siegerClose">Schließen</button>
     </div>
   </div>
 </div>
 
-<div id="reset-modal">
+<div id="add-player-modal" class="modal-wrap">
   <div class="modal-card">
-    <h3>Alles zurücksetzen?</h3>
-    <p>Alle Punkte werden auf 0 gesetzt.</p>
+    <h3>Spieler:in hinzufügen</h3>
+    <div style="display:flex;flex-direction:column;gap:0.8rem;text-align:left;">
+      <input id="addp-name" type="text" maxlength="12" placeholder="Name" class="addp-input">
+      <div class="addp-color-row" id="addpColorRow">
+        Farbe
+        <span class="hex" id="addpHex">#4DBFB8</span>
+        <div class="color-swatch" id="addpSwatch"></div>
+      </div>
+    </div>
     <div class="modal-actions">
-      <button class="btn-cancel" id="cancelReset">Abbrechen</button>
-      <button class="btn-confirm" id="confirmReset">Zurücksetzen</button>
+      <button class="btn-cancel rip" id="cancelAddPlayer">Abbrechen</button>
+      <button class="btn-confirm rip" id="confirmAddPlayer">Hinzufügen</button>
     </div>
   </div>
 </div>
 
-<canvas id="confetti-canvas"></canvas>
+<div id="reset-modal" class="modal-wrap">
+  <div class="modal-card">
+    <h3>Zurücksetzen?</h3>
+    <p>Punkte auf 0 setzen – oder ein ganz neues Spiel mit neuer Runde starten.</p>
+    <div class="modal-actions">
+      <button class="btn-cancel rip" id="cancelReset">Abbrechen</button>
+      <button class="btn-confirm rip" id="confirmReset">Punkte auf 0</button>
+    </div>
+    <button class="btn-newgame" id="newGameBtn">🏁 Neues Spiel (zurück zum Start)</button>
+  </div>
+</div>
+
+<!-- Color-Picker: Sättigung/Helligkeit im Quadrat + Farbton-Regler daneben -->
+<div id="cp-sheet" class="cp-wrap">
+  <div class="cp-backdrop" id="cpBackdrop"></div>
+  <div class="cp-card">
+    <div class="panel-handle" style="margin-bottom:0"></div>
+    <div class="cp-head">
+      <h3>Farbe wählen</h3>
+      <div class="cp-preview">
+        <span class="cp-hex" id="cpHex">#FFFFFF</span>
+        <div class="cp-dots"><i class="old"></i><i class="new"></i></div>
+      </div>
+    </div>
+    <div class="cp-main">
+      <div class="cp-sv" id="cpSV"><div class="cp-sv-thumb"></div></div>
+      <div class="cp-hue" id="cpHue"><div class="cp-hue-thumb"></div></div>
+    </div>
+    <div class="cp-warn" id="cpWarn"></div>
+    <div class="cp-presets" id="cpPresets"></div>
+    <div class="cp-hint">● = schon vergeben</div>
+    <div class="modal-actions">
+      <button class="btn-cancel rip" id="cpCancel">Abbrechen</button>
+      <button class="btn-confirm rip" id="cpOk">Übernehmen</button>
+    </div>
+  </div>
+</div>
+
+<canvas id="fx-canvas"></canvas>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -417,6 +1107,58 @@ let state = { players: [], history: [] };
 let startPlayerIdx = 0;
 let activeIdx = null;
 const confettiFired = new Set();
+
+const $ = id => document.getElementById(id);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+const easeOutCubic = t => 1 - Math.pow(1 - t, 3);
+const easeOutBack = t => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); };
+
+// ── Animationen an/aus ─────────────────────────────────
+// Einstellung liegt in localStorage (flip7_anim_off = '1' → aus).
+const ANIM = { on: !document.documentElement.classList.contains('no-anim') };
+function setAnimOff(off) {
+  ANIM.on = !off;
+  try { localStorage.setItem('flip7_anim_off', off ? '1' : '0'); } catch (e) {}
+  document.documentElement.classList.toggle('no-anim', off);
+  if (off) { FX.clearSparks(); pieSnapAll(); }
+}
+
+// ── Farb-Helfer ───────────────────────────────────────
+function hexToRgb(hex) {
+  let h = String(hex || '#000').replace('#', '');
+  if (h.length === 3) h = h.split('').map(c => c + c).join('');
+  const n = parseInt(h, 16) || 0;
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+}
+function rgba(hex, a) { const { r, g, b } = hexToRgb(hex); return `rgba(${r},${g},${b},${a})`; }
+function luminance(hex) {
+  const { r, g, b } = hexToRgb(hex);
+  const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+  return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+}
+// Lokales Datum "YYYY-MM-DD" (toISOString wäre UTC → nach Mitternacht falscher Tag)
+function localYMD(d = new Date()) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// ── Laufendes Spiel sichern ─────────────────────────────
+// Android lädt die WebView bei Splitscreen/Multi-Window neu →
+// deshalb wird der Spielstand bei jeder Änderung in localStorage
+// gesichert und beim Start automatisch wiederhergestellt.
+const LIVE_KEY = 'flip7_live_game';
+function saveLiveGame() {
+  if (!state.players.length) return;
+  try {
+    localStorage.setItem(LIVE_KEY, JSON.stringify({
+      players: state.players, history: state.history,
+      schnell: !!state.schnell, ziel: state.ziel || 200,
+      activeIdx, startIdx: startPlayerIdx, confetti: [...confettiFired]
+    }));
+  } catch (e) { /* Speicher voll o.ä. – Spiel läuft trotzdem weiter */ }
+}
+function clearLiveGame() { try { localStorage.removeItem(LIVE_KEY); } catch (e) {} }
 
 // ── Name normalization for win counter ───────────────────
 const NAME_ALIASES = [
@@ -431,7 +1173,930 @@ function normalizeName(name) {
   return n;
 }
 
-// ── Medaillen-System ─────────────────────────────────────
+// ── Modals / Overlay ─────────────────────────────────────
+const overlay = $('overlay');
+function openModal(id) {
+  const m = $(id);
+  clearTimeout(m._closeT);
+  m.classList.remove('closing');
+  m.classList.add('open');
+  overlay.classList.add('active');
+}
+function closeModal(id) {
+  const m = $(id);
+  if (!m.classList.contains('open')) return;
+  clearTimeout(m._closeT);
+  if (!ANIM.on) { m.classList.remove('open', 'closing'); return; }
+  m.classList.add('closing');
+  m._closeT = setTimeout(() => m.classList.remove('open', 'closing'), 190);
+}
+function closeAllModals() {
+  $('history-panel').classList.remove('open');
+  ['reset-modal', 'sieger-modal', 'add-player-modal'].forEach(closeModal);
+  overlay.classList.remove('active');
+}
+
+// ── Toast ──────────────────────────────────────────────
+let toastTimer;
+function showToast(msg, color) {
+  const t = $('toast');
+  t.innerHTML = (color ? `<span class="dot" style="--c:${color}"></span>` : '') + `<span>${esc(msg)}</span>`;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2000);
+}
+
+// ── Tap-Ripple auf Buttons mit Klasse .rip ─────────────
+document.addEventListener('pointerdown', e => {
+  if (!ANIM.on) return;
+  const b = e.target.closest('.rip');
+  if (!b) return;
+  const r = b.getBoundingClientRect();
+  const d = Math.max(r.width, r.height) * 2.2;
+  const dot = document.createElement('span');
+  dot.className = 'ripple-dot';
+  dot.style.cssText = `width:${d}px;height:${d}px;left:${e.clientX - r.left}px;top:${e.clientY - r.top}px`;
+  b.appendChild(dot);
+  setTimeout(() => dot.remove(), 600);
+}, { passive: true });
+
+// CSS-Animation neu starten (Klasse entfernen, Reflow, wieder setzen)
+function retrigger(el, cls) {
+  if (!ANIM.on || !el) return;
+  el.classList.remove(cls);
+  void el.offsetWidth;
+  el.classList.add(cls);
+}
+
+// ══════════════════════════════════════════════════════
+// FX-ENGINE: ein Canvas über allem für Funken, Glut,
+// Schockwellen, Rauch und Konfetti. Läuft nur, solange
+// etwas animiert – danach schläft der rAF-Loop.
+// ══════════════════════════════════════════════════════
+const FX = (() => {
+  const cv = $('fx-canvas');
+  const ctx = cv.getContext('2d');
+  let dpr = 1, W = 0, H = 0;
+  let parts = [];
+  let running = false, last = 0;
+  const hooks = new Set();
+  const sprites = new Map();
+
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  // Vorgerenderter Leuchtpunkt pro Farbe (schneller als Gradient pro Frame)
+  function sprite(color) {
+    let s = sprites.get(color);
+    if (s) return s;
+    s = document.createElement('canvas');
+    s.width = s.height = 64;
+    const c = s.getContext('2d');
+    const g = c.createRadialGradient(32, 32, 0, 32, 32, 32);
+    g.addColorStop(0, 'rgba(255,255,255,1)');
+    g.addColorStop(0.16, rgba(color, 1));
+    g.addColorStop(0.42, rgba(color, 0.32));
+    g.addColorStop(1, rgba(color, 0));
+    c.fillStyle = g; c.fillRect(0, 0, 64, 64);
+    sprites.set(color, s);
+    return s;
+  }
+
+  function add(p) { parts.push(p); kick(); }
+  function kick() {
+    if (running) return;
+    running = true; last = performance.now();
+    requestAnimationFrame(frame);
+  }
+
+  function bez(a, b, c, d, t) { const u = 1 - t; return u*u*u*a + 3*u*u*t*b + 3*u*t*t*c + t*t*t*d; }
+
+  function frame(now) {
+    const dt = Math.min(0.05, Math.max(0.001, (now - last) / 1000));
+    last = now;
+    let alive = false;
+    hooks.forEach(h => { if (h(dt, now)) alive = true; });
+
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    const f = dt * 60;
+    const next = [];
+    // Pass 1: Physik
+    for (const p of parts) {
+      if (p.type === 'spark') {
+        p.t += dt;
+        if (p.t < 0) { next.push(p); continue; }
+        const u = Math.min(1, p.t / p.dur);
+        const T = p.tgt();
+        const e = u * u * (1.35 - 0.35 * u);             // leicht beschleunigend → "zischt" ins Ziel
+        const c2x = T.x + T.nx * p.app, c2y = T.y + T.ny * p.app;
+        p.x = bez(p.x0, p.c1x, c2x, T.x, e);
+        p.y = bez(p.y0, p.c1y, c2y, T.y, e);
+        p.trail.push(p.x, p.y);
+        if (p.trail.length > 18) p.trail.splice(0, 2);
+        if (u >= 1) { p.onArrive && p.onArrive(p, T); continue; }
+        next.push(p);
+      } else if (p.type === 'confetti') {
+        const dr = Math.pow(p.drag, f);
+        p.vx *= dr; p.vy = p.vy * dr + p.grav * f;
+        p.x += p.vx * f; p.y += p.vy * f;
+        p.rot += p.spin * f; p.tilt += p.tiltSpd * f;
+        if (p.y > H * 0.88) p.life -= 0.03 * f;
+        if (p.life > 0.02 && p.y < H + 60) next.push(p);
+      } else {
+        p.age = (p.age || 0) + dt;
+        if (p.age < 0) { next.push(p); continue; }
+        if (p.type === 'ember') {
+          const dr = Math.pow(p.drag || 0.96, f);
+          p.vx *= dr; p.vy = p.vy * dr + (p.grav || 0) * dt;
+          p.x += p.vx * dt; p.y += p.vy * dt;
+        } else if (p.type === 'puff') {
+          p.x += p.vx * dt; p.y += p.vy * dt; p.r += p.grow * dt;
+        }
+        if (p.age < p.dur) next.push(p);
+      }
+    }
+    parts = next;
+
+    // Pass 2: normale Ebene (Konfetti, Rauch)
+    for (const p of parts) {
+      if (p.type === 'confetti') {
+        const c = Math.cos(p.rot), s = Math.sin(p.rot), sy = Math.cos(p.tilt);
+        ctx.setTransform(dpr * c, dpr * s, -dpr * s * sy, dpr * c * sy, dpr * p.x, dpr * p.y);
+        ctx.globalAlpha = Math.max(0, Math.min(1, p.life));
+        ctx.fillStyle = p.color;
+        if (p.shape === 'c') { ctx.beginPath(); ctx.arc(0, 0, p.h * 0.7, 0, 6.2832); ctx.fill(); }
+        else ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+      } else if (p.type === 'puff' && p.age >= 0) {
+        const k = p.age / p.dur;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.globalAlpha = (1 - k) * (p.alpha || 0.35);
+        ctx.fillStyle = p.color;
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 6.2832); ctx.fill();
+      }
+    }
+    // Pass 3: additive Leucht-Ebene (Funken, Glut, Ringe)
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.globalCompositeOperation = 'lighter';
+    for (const p of parts) {
+      if (p.type === 'spark' && p.t >= 0) {
+        const tr = p.trail, n = tr.length / 2;
+        ctx.strokeStyle = p.color; ctx.lineCap = 'round';
+        for (let k = 1; k < n; k++) {
+          const a = k / n;
+          ctx.globalAlpha = a * 0.75;
+          ctx.lineWidth = p.size * a * 1.25;
+          ctx.beginPath();
+          ctx.moveTo(tr[(k - 1) * 2], tr[(k - 1) * 2 + 1]);
+          ctx.lineTo(tr[k * 2], tr[k * 2 + 1]);
+          ctx.stroke();
+        }
+        const s = p.size * 5.2;
+        ctx.globalAlpha = 1;
+        ctx.drawImage(sprite(p.color), p.x - s / 2, p.y - s / 2, s, s);
+      } else if (p.type === 'ember' && p.age >= 0) {
+        const k = 1 - p.age / p.dur;
+        const s = p.size * (2 + 3 * k);
+        ctx.globalAlpha = k;
+        ctx.drawImage(sprite(p.color), p.x - s / 2, p.y - s / 2, s, s);
+      } else if (p.type === 'ring' && p.age >= 0) {
+        const k = p.age / p.dur;
+        const r = p.r0 + (p.r1 - p.r0) * easeOutCubic(k);
+        ctx.globalAlpha = (1 - k) * (p.alpha || 0.9);
+        ctx.strokeStyle = p.color;
+        ctx.lineWidth = (p.w || 3) * (1 - k * 0.7);
+        ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, 6.2832); ctx.stroke();
+      }
+    }
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+
+    if (alive || parts.length) requestAnimationFrame(frame);
+    else { running = false; ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, cv.width, cv.height); }
+  }
+
+  return {
+    add, kick,
+    hook(fn) { hooks.add(fn); },
+    // Funken eines Spielers (oder aller) abbrechen → werden zu verglühender Glut
+    cancelSparks(player) {
+      parts.forEach(p => {
+        if (p.type !== 'spark' || (player !== undefined && p.player !== player)) return;
+        p.type = 'ember'; p.age = 0; p.dur = 0.45; p.drag = 0.9;
+        p.x = p.x || p.x0; p.y = p.y || p.y0;
+        p.vx = (Math.random() - 0.5) * 120; p.vy = (Math.random() - 0.5) * 120; p.grav = 200;
+      });
+    },
+    clearSparks() { parts = parts.filter(p => p.type === 'confetti'); },
+    count(type) { return parts.filter(p => p.type === type).length; }
+  };
+})();
+
+// ── Kleine FX-Bausteine ────────────────────────────────
+function fxRing(x, y, color, r1 = 36, dur = 0.5, w = 3, alpha = 0.9) {
+  if (!ANIM.on) return;
+  FX.add({ type: 'ring', x, y, r0: 2, r1, dur, age: 0, color, w, alpha });
+}
+function fxEmbers(x, y, color, n = 6, speed = 160, opts = {}) {
+  if (!ANIM.on) return;
+  for (let k = 0; k < n; k++) {
+    const a = (opts.dir !== undefined ? opts.dir + (Math.random() - 0.5) * (opts.spread || 1.6) : Math.random() * Math.PI * 2);
+    const sp = speed * (0.35 + Math.random() * 0.8);
+    FX.add({
+      type: 'ember', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+      grav: opts.grav || 0, drag: opts.drag || 0.93, size: opts.size || (1.4 + Math.random() * 1.6),
+      dur: (opts.dur || 0.45) * (0.6 + Math.random() * 0.8), age: -(opts.delay || 0) * Math.random(), color
+    });
+  }
+}
+function fxPuff(x, y, n = 7, color = '#8a8aa0') {
+  if (!ANIM.on) return;
+  for (let k = 0; k < n; k++) {
+    const a = -Math.PI / 2 + (Math.random() - 0.5) * 2.2;
+    FX.add({ type: 'puff', x: x + (Math.random() - 0.5) * 14, y, vx: Math.cos(a) * 40, vy: Math.sin(a) * 50,
+      r: 5 + Math.random() * 6, grow: 26 + Math.random() * 20, dur: 0.6 + Math.random() * 0.3, age: -k * 0.02, color, alpha: 0.3 });
+  }
+}
+
+// ── Konfetti (3 Wellen, jetzt mit Flatter-Physik) ──────
+// mode: 'rain' (von oben), 'cannons' (Kanonen links/rechts), {x,y} (Explosion)
+function launchConfetti(base, mode = 'rain') {
+  const pal = [base, '#f7c948', '#fffffe', '#4ecdc4', '#ff6b35', '#a78bfa', '#fb7185'];
+  [0, 300, 600].forEach((delay, wi) => {
+    setTimeout(() => {
+      const W = window.innerWidth, H = window.innerHeight;
+      const n = mode === 'rain' ? 170 : 80;
+      for (let i = 0; i < n; i++) {
+        let x, y, vx, vy;
+        if (mode === 'cannons') {
+          const left = i % 2 === 0;
+          x = left ? -8 : W + 8; y = H * (0.62 + Math.random() * 0.12);
+          const a = left ? (-Math.PI / 2 + 0.25 + Math.random() * 0.55) : (-Math.PI / 2 - 0.25 - Math.random() * 0.55);
+          const sp = 10 + Math.random() * 11;
+          vx = Math.cos(a) * sp; vy = Math.sin(a) * sp;
+        } else if (typeof mode === 'object') {
+          x = mode.x; y = mode.y;
+          const a = Math.random() * Math.PI * 2, sp = 2 + Math.random() * 9;
+          vx = Math.cos(a) * sp; vy = Math.sin(a) * sp - 5;
+        } else {
+          x = Math.random() * W; y = -10 - Math.random() * 100;
+          vx = (Math.random() - .5) * 5; vy = 1.5 + Math.random() * 4;
+        }
+        FX.add({
+          type: 'confetti', x, y, vx, vy,
+          w: 6 + Math.random() * 9, h: 3 + Math.random() * 5,
+          color: pal[Math.floor(Math.random() * pal.length)],
+          rot: Math.random() * 6.28, spin: (Math.random() - .5) * 0.2,
+          tilt: Math.random() * 6.28, tiltSpd: 0.06 + Math.random() * 0.12,
+          grav: 0.07 + Math.random() * 0.05, drag: mode === 'rain' ? 0.995 : 0.975, life: 1,
+          shape: Math.random() < 0.22 ? 'c' : 'r'
+        });
+      }
+    }, delay);
+  });
+}
+</script>
+
+<script>
+// ══════════════════════════════════════════════════════
+// TORTE: Aufbau (renderPie) + animierte Geometrie (drawPie)
+// Der echte Spielstand ändert sich sofort – nur die ANZEIGE
+// läuft per Feder/Funken hinterher. Man kann also jederzeit
+// weitertippen, während Animationen laufen.
+// ══════════════════════════════════════════════════════
+const pieSvg = $('pie-svg');
+const glowSvg = $('pie-glow'), glowG = $('glow-g'), glowPath = $('glow-path');
+let pieAnim = [];      // pro Spieler: Animationszustand
+let inflight = [];     // pro Spieler: Punkte, die noch als Funken unterwegs sind
+let sliceEls = [];     // pro Spieler: DOM-Referenzen
+let pieIntro = null;   // {t0} – Einflug-Animation beim Spielstart
+let layoutAnim = null; // {from, t0, dur} – Winkel-Übergang beim Hinzufügen
+let arrowShown = null; // aktueller (animierter) Winkel des Startspieler-Pfeils
+let centerFlipT0 = -1;
+let prevMedal = [];
+let arrowG = null, arrowPoly = null, centerG = null;
+let pieCTM = null, pieWasActive = false;
+
+const MAX_SCORE = () => state.ziel || 200;
+const r1 = v => v.toFixed(1);
+
+function svgEl(tag, attrs = {}) {
+  const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+  return el;
+}
+function setAttr(el, k, v) {
+  const c = el._a || (el._a = {});
+  if (c[k] !== v) { c[k] = v; el.setAttribute(k, v); }
+}
+function polar(deg, r) {
+  const rad = (deg - 90) * Math.PI / 180;
+  return { x: CX + r * Math.cos(rad), y: CY + r * Math.sin(rad) };
+}
+function arc(s, e, rOuter, rInner) {
+  // Gap in pixels (not degrees) so spacing looks equal at all radii
+  const GAP_PX = 2.5;
+  const gOuter = (GAP_PX / rOuter) * (180 / Math.PI);
+  const gInner = (GAP_PX / rInner) * (180 / Math.PI);
+  const a1 = s + gOuter / 2, b1 = e - gOuter / 2; // outer arc angles
+  const a2 = s + gInner / 2, b2 = e - gInner / 2; // inner arc angles
+  if (b1 <= a1 || b2 <= a2) return '';
+  const lg = b1 - a1 > 180 ? 1 : 0;
+  const o1 = polar(a1, rOuter), o2 = polar(b1, rOuter);
+  const i1 = polar(b2, rInner), i2 = polar(a2, rInner);
+  return `M${r1(o1.x)} ${r1(o1.y)} A${rOuter} ${rOuter} 0 ${lg} 1 ${r1(o2.x)} ${r1(o2.y)} L${r1(i1.x)} ${r1(i1.y)} A${rInner} ${rInner} 0 ${lg} 0 ${r1(i2.x)} ${r1(i2.y)}Z`;
+}
+// Füllung mit "flüssiger" Oberkante: nach Einschlägen schwappt sie als Welle
+function fillShape(s, e, rF, amp, phase) {
+  const GAP_PX = 2.5;
+  const gO = (GAP_PX / rF) * (180 / Math.PI), gI = (GAP_PX / R_IN) * (180 / Math.PI);
+  const a1 = s + gO / 2, b1 = e - gO / 2, a2 = s + gI / 2, b2 = e - gI / 2;
+  if (b1 <= a1 || b2 <= a2) return { fill: '', edge: '' };
+  const i1 = polar(b2, R_IN), i2 = polar(a2, R_IN);
+  const lgI = (b2 - a2) > 180 ? 1 : 0;
+  let edge;
+  if (amp < 0.12) {
+    const o1 = polar(a1, rF), o2 = polar(b1, rF);
+    edge = `M${r1(o1.x)} ${r1(o1.y)} A${r1(rF)} ${r1(rF)} 0 ${(b1 - a1) > 180 ? 1 : 0} 1 ${r1(o2.x)} ${r1(o2.y)}`;
+  } else {
+    const span = b1 - a1;
+    const steps = Math.max(12, Math.ceil(span / 1.6));
+    const waves = Math.max(1, Math.round((span * Math.PI / 180) * rF / 46));
+    edge = '';
+    for (let k = 0; k <= steps; k++) {
+      const u = k / steps;
+      const env = Math.sin(Math.PI * u);
+      const r = clamp(rF + amp * env * Math.sin(u * waves * Math.PI * 2 + phase), R_IN + 0.5, R_OUT + 6);
+      const q = polar(a1 + span * u, r);
+      edge += (k ? 'L' : 'M') + r1(q.x) + ' ' + r1(q.y);
+    }
+  }
+  return { fill: `${edge}L${r1(i1.x)} ${r1(i1.y)}A${R_IN} ${R_IN} 0 ${lgI} 0 ${r1(i2.x)} ${r1(i2.y)}Z`, edge };
+}
+const fillRadius = v => R_IN + (R_OUT - R_IN) * clamp(v / MAX_SCORE(), 0, 1);
+
+// ── Animationszustand ─────────────────────────────────
+function newAnim(score) {
+  return { num: score, fill: score, fillVel: 0, pop: 0, popVel: 0, kick: 0, kickVel: 0,
+           wave: 0, phase: Math.random() * 6, pulse: 0, shake: 0, flash: 0, dx: 0, dy: 0 };
+}
+function ensurePieAnim() {
+  while (pieAnim.length < state.players.length) { pieAnim.push(newAnim(state.players[pieAnim.length].score)); inflight.push(0); }
+  pieAnim.length = state.players.length; inflight.length = state.players.length;
+}
+function resetPieAnim() {
+  pieAnim = state.players.map(p => newAnim(p.score));
+  inflight = state.players.map(() => 0);
+  prevMedal = []; arrowShown = null; layoutAnim = null; pieIntro = null;
+}
+// Alles sofort auf Endstand (z. B. wenn Animationen ausgeschaltet werden)
+function pieSnapAll() {
+  pieAnim.forEach((a, i) => Object.assign(a, newAnim(state.players[i] ? state.players[i].score : 0)));
+  inflight = inflight.map(() => 0);
+  pieIntro = null; layoutAnim = null; arrowShown = null; centerFlipT0 = -1;
+  if (state.players.length) drawPie(performance.now());
+}
+
+// ── Geometrie ─────────────────────────────────────────
+function targetAngles(i, n) { const d = 360 / n; return { s: i * d, e: (i + 1) * d }; }
+function sliceAngles(i, now) {
+  const T = targetAngles(i, state.players.length);
+  if (!layoutAnim || !ANIM.on) return T;
+  const k = easeOutCubic(clamp((now - layoutAnim.t0) / layoutAnim.dur, 0, 1));
+  const F = layoutAnim.from[i] || { s: 360, e: 360 };
+  return { s: lerp(F.s, T.s, k), e: lerp(F.e, T.e, k) };
+}
+function arrowTargetAngle(now) {
+  if (!state.players.length) return 0;
+  const { s, e } = sliceAngles(startPlayerIdx, now);
+  const mid = (s + e) / 2;
+  if (arrowShown === null) return mid;
+  let d = ((mid - arrowShown) % 360 + 360) % 360;   // immer vorwärts / kürzester Weg
+  if (d > 180.5) d -= 360;
+  return arrowShown + d;
+}
+function pieToScreen(x, y) {
+  const m = pieCTM || (pieCTM = pieSvg.getScreenCTM());
+  if (!m) return { x: 0, y: 0 };
+  return { x: m.a * x + m.c * y + m.e, y: m.b * x + m.d * y + m.f };
+}
+// Punkt auf der aktuellen Füll-Oberfläche eines Stücks (Bildschirmkoordinaten)
+function sparkTarget(i, frac) {
+  const { s, e } = sliceAngles(i, performance.now());
+  const a = pieAnim[i] || {};
+  const ang = s + (e - s) * frac;
+  const q = polar(ang, fillRadius(Math.max(a.fill || 0, 0)) + 2);
+  const p = pieToScreen(q.x + (a.dx || 0), q.y + (a.dy || 0));
+  const rad = (ang - 90) * Math.PI / 180;
+  return { x: p.x, y: p.y, nx: Math.cos(rad), ny: Math.sin(rad) };
+}
+
+// ── Aufbau ────────────────────────────────────────────
+function renderPie() {
+  ensurePieAnim();
+  pieSvg.innerHTML = '';
+  sliceEls = [];
+  const n = state.players.length;
+  if (!n) return;
+  const maxScore = Math.max(...state.players.map(p => p.score));
+  const hasWinner = maxScore > 0;
+  // Medaillen: Top-3-Punktestände (nur > 0), Gleichstand teilt sich die Medaille.
+  // Rein kosmetisch – die echte Medaillen-Statistik vergibt openSiegerehrung().
+  const MEDAL_EMOJI = ['🥇', '🥈', '🥉'];
+  const topScores = [...new Set(state.players.map(p => p.score).filter(s => s > 0))].sort((a, b) => b - a).slice(0, 3);
+
+  const defs = svgEl('defs');
+  const f = svgEl('filter', { id: 'glow', x: '-25%', y: '-25%', width: '150%', height: '150%' });
+  f.appendChild(svgEl('feGaussianBlur', { in: 'SourceGraphic', stdDeviation: '5', result: 'b' }));
+  const merge = svgEl('feMerge');
+  merge.appendChild(svgEl('feMergeNode', { in: 'b' }));
+  merge.appendChild(svgEl('feMergeNode', { in: 'SourceGraphic' }));
+  f.appendChild(merge); defs.appendChild(f);
+  // Schattierung für Tiefe: innen dunkler, außen heller
+  const shade = svgEl('radialGradient', { id: 'shade', gradientUnits: 'userSpaceOnUse', cx: CX, cy: CY, r: R_OUT });
+  shade.appendChild(svgEl('stop', { offset: '0.3', 'stop-color': '#000', 'stop-opacity': '0.38' }));
+  shade.appendChild(svgEl('stop', { offset: '0.75', 'stop-color': '#000', 'stop-opacity': '0.06' }));
+  shade.appendChild(svgEl('stop', { offset: '1', 'stop-color': '#fff', 'stop-opacity': '0.16' }));
+  defs.appendChild(shade);
+  pieSvg.appendChild(defs);
+
+  const sf = n<=3?30 : n<=4?26 : n<=5?22 : n<=6?19 : n<=8?15 : n<=10?12 : n<=13?10 : 8;
+  const nf = n<=3?18 : n<=4?16 : n<=5?14 : n<=6?12 : n<=8?10 : n<=10?8 : n<=13?7 : 6;
+  const gap = sf * 0.68;
+  const half = MAX_SCORE() * 0.5;
+
+  state.players.forEach((p, i) => {
+    const isWinner = hasWinner && p.score === maxScore;
+    const isActive = i === activeIdx;
+    const g = svgEl('g', { class: 'pie-slice' });
+    if (isWinner) g.setAttribute('filter', 'url(#glow)');
+
+    const track = svgEl('path', { fill: p.color, opacity: '0.15' });
+    const fill = svgEl('path', { fill: p.color, opacity: isActive ? '1' : isWinner ? '0.95' : '0.82' });
+    if (isActive) { fill.setAttribute('stroke', 'rgba(255,255,255,0.5)'); fill.setAttribute('stroke-width', '2'); }
+    const shadeP = svgEl('path', { fill: 'url(#shade)', 'pointer-events': 'none' });
+    const edge = svgEl('path', { fill: 'none', stroke: '#fff', 'stroke-opacity': isActive ? '0.8' : '0.5', 'stroke-width': '1.6', 'stroke-linecap': 'round', 'pointer-events': 'none' });
+    g.append(track, fill, shadeP, edge);
+
+    const tg = svgEl('g');
+    const st = svgEl('text', { x: 0, y: 0, 'text-anchor': 'middle', 'dominant-baseline': 'middle', fill: p.score < 0 ? '#ff6b6b' : '#fff',
+      'font-family': 'DM Mono,monospace', 'font-weight': '500', 'font-size': sf, transform: `translate(0,${-gap * 0.32})` });
+    st.textContent = p.score;
+    const nt = svgEl('text', { x: 0, y: 0, 'text-anchor': 'middle', 'dominant-baseline': 'middle', fill: 'rgba(255,255,255,0.92)',
+      'font-family': 'Syne,sans-serif', 'font-weight': '700', 'font-size': nf, 'letter-spacing': '0.8', transform: `translate(0,${gap * 0.82})`,
+      stroke: '#0f0e17', 'stroke-width': '3', 'paint-order': 'stroke' });
+    nt.textContent = p.name.toUpperCase().slice(0, 10);
+    tg.append(st, nt);
+
+    const medalRank = topScores.indexOf(p.score);
+    if (medalRank >= 0) {
+      const medalSize = n<=3?22 : n<=4?18 : n<=5?15 : n<=8?13 : n<=12?10 : 8;
+      const mg = svgEl('g', { transform: `translate(0,${gap * 2.2})` });
+      const medal = svgEl('text', { x: 0, y: 0, 'text-anchor': 'middle', 'dominant-baseline': 'middle', 'font-size': medalSize, stroke: '#0f0e17', 'stroke-width': '4', 'paint-order': 'stroke' });
+      if (ANIM.on && prevMedal[i] !== medalRank) medal.setAttribute('class', 'medal-pop');
+      medal.textContent = MEDAL_EMOJI[medalRank];
+      mg.appendChild(medal); tg.appendChild(mg);
+    }
+    prevMedal[i] = medalRank;
+
+    // 😭 erscheint wenn: dieser Spieler hat 0 Punkte UND alle anderen haben ≥50% des Ziels
+    const othersAllAtHalf = state.players.every((op, oi) => oi === i || op.score >= half);
+    if (p.score === 0 && othersAllAtHalf && n > 1) {
+      const crySize = n<=3?20 : n<=4?17 : n<=5?14 : n<=8?12 : n<=12?10 : 8;
+      const cg = svgEl('g', { transform: `translate(0,${gap * 2.2})` });
+      const cry = svgEl('text', { x: 0, y: 0, 'text-anchor': 'middle', 'dominant-baseline': 'middle', 'font-size': crySize, stroke: '#0f0e17', 'stroke-width': '3', 'paint-order': 'stroke', class: 'cry-wobble' });
+      cry.textContent = '😭';
+      cg.appendChild(cry); tg.appendChild(cg);
+    }
+    g.appendChild(tg);
+
+    g.addEventListener('click', () => selectPlayer(i));
+    g.addEventListener('touchend', e => { e.preventDefault(); selectPlayer(i); });
+    pieSvg.appendChild(g);
+    sliceEls[i] = { g, track, fill, shade: shadeP, edge, tg, score: st };
+  });
+
+  // ── Startspieler-Pfeil am Außenrand (dreht sich animiert weiter) ──
+  arrowG = svgEl('g');
+  arrowPoly = svgEl('polygon', { points: '200,3 206,-12 194,-12', fill: state.players[startPlayerIdx]?.color || '#fff',
+    stroke: '#0f0e17', 'stroke-width': '2', 'stroke-linejoin': 'round', class: 'arrow-bob' });
+  arrowG.appendChild(arrowPoly);
+  pieSvg.appendChild(arrowG);
+
+  // ── Mitte ──
+  pieSvg.appendChild(svgEl('circle', { cx: CX, cy: CY, r: R_IN - 5, fill: '#0f0e17', stroke: '#2a2940', 'stroke-width': '1.5' }));
+  centerG = svgEl('g');
+  const cl1 = svgEl('text', { x: CX, y: CY - 8, 'text-anchor': 'middle', 'dominant-baseline': 'middle', fill: '#fffffe', 'font-family': 'Syne,sans-serif', 'font-weight': '800', 'font-size': '17', 'letter-spacing': '-1' });
+  cl1.textContent = 'FLIP';
+  const cl2 = svgEl('text', { x: CX, y: CY + 12, 'text-anchor': 'middle', 'dominant-baseline': 'middle', fill: '#ff6b35', 'font-family': 'Syne,sans-serif', 'font-weight': '800', 'font-size': '17', 'letter-spacing': '-1' });
+  cl2.textContent = '7';
+  centerG.append(cl1, cl2);
+  pieSvg.appendChild(centerG);
+
+  // Invisible tap target over center to advance start player
+  const centerTap = svgEl('circle', { cx: CX, cy: CY, r: R_IN - 5, fill: 'transparent', cursor: 'pointer' });
+  const advance = () => {
+    startPlayerIdx = (startPlayerIdx + 1) % state.players.length;
+    centerFlipT0 = performance.now();
+    renderPie();
+    FX.kick();
+    const sp = state.players[startPlayerIdx];
+    showToast(`Startspieler:in: ${sp.name}`, sp.color);
+    saveLiveGame();
+  };
+  centerTap.addEventListener('click', advance);
+  centerTap.addEventListener('touchend', e => { e.preventDefault(); e.stopPropagation(); advance(); });
+  pieSvg.appendChild(centerTap);
+
+  // Glow-Farbe fürs aktive Stück
+  if (activeIdx !== null && state.players[activeIdx]) setAttr(glowPath, 'stroke', state.players[activeIdx].color);
+  pieCTM = null;
+  drawPie(performance.now());
+  updateHalo();
+  updateAmbientColor();
+}
+
+// ── Pro Frame: Geometrie aus dem Animationszustand ────
+function drawPie(now) {
+  const n = state.players.length;
+  if (!n || !sliceEls.length) return;
+  const anim = ANIM.on;
+  const MAX = MAX_SCORE();
+  const textR = R_IN + (R_OUT - R_IN) * 0.5;
+  for (let i = 0; i < n; i++) {
+    const E = sliceEls[i], a = pieAnim[i], p = state.players[i];
+    if (!E || !a) continue;
+    const { s, e } = sliceAngles(i, now);
+    const mid = (s + e) / 2;
+    const num = anim ? a.num : p.score;
+    const fillV = anim ? a.fill : p.score;
+    const pop = anim ? a.pop : (i === activeIdx ? 1 : 0);
+
+    const rad = (mid - 90) * Math.PI / 180;
+    const push = 6 * pop + (anim ? a.kick * 0.12 : 0);
+    let dx = Math.cos(rad) * push, dy = Math.sin(rad) * push;
+    if (anim && a.shake > 0) {
+      const j = Math.sin(now * 0.075) * 5 * a.shake;
+      dx += -Math.sin(rad) * j; dy += Math.cos(rad) * j;
+    }
+    a.dx = dx; a.dy = dy;
+    let tf = `translate(${dx.toFixed(2)} ${dy.toFixed(2)})`;
+    let op = 1;
+    if (anim && pieIntro) {
+      const lt = clamp((now - pieIntro.t0 - i * 45) / 600, 0, 1);
+      const sc = 0.25 + 0.75 * easeOutBack(lt), rot = -40 * (1 - easeOutCubic(lt));
+      if (lt < 1) tf += ` rotate(${rot.toFixed(2)} 200 200) translate(200 200) scale(${sc.toFixed(3)}) translate(-200 -200)`;
+      op = clamp(lt * 3, 0, 1);
+    }
+    setAttr(E.g, 'transform', tf);
+    setAttr(E.g, 'opacity', op < 1 ? op.toFixed(3) : '1');
+
+    const key = s.toFixed(2) + '|' + e.toFixed(2);
+    if (E.key !== key) { E.key = key; E.track.setAttribute('d', arc(s, e, R_OUT, R_IN)); }
+    const neg = num < 0;
+    const fl = anim ? a.flash : 0;
+    setAttr(E.track, 'fill', (neg || fl > 0.05) ? '#ff4040' : p.color);
+    setAttr(E.track, 'opacity', neg ? '0.38' : fl > 0.05 ? (0.15 + 0.45 * fl).toFixed(3) : '0.15');
+
+    const ratio = clamp(fillV / MAX, 0, 1);
+    if (ratio > 0.002) {
+      const d = fillShape(s, e, fillRadius(fillV), anim ? a.wave : 0, a.phase);
+      setAttr(E.fill, 'd', d.fill); setAttr(E.shade, 'd', d.fill); setAttr(E.edge, 'd', d.edge);
+    } else {
+      setAttr(E.fill, 'd', ''); setAttr(E.shade, 'd', ''); setAttr(E.edge, 'd', '');
+    }
+
+    const tp = polar(mid, textR);
+    let rot = mid;
+    const norm = ((mid % 360) + 360) % 360;
+    if (norm > 90 && norm < 270) rot += 180;
+    const ps = 1 + (anim ? a.pulse * 0.3 : 0);
+    setAttr(E.tg, 'transform', `translate(${tp.x.toFixed(2)},${tp.y.toFixed(2)}) rotate(${rot.toFixed(2)})` + (ps !== 1 ? ` scale(${ps.toFixed(3)})` : ''));
+    const shown = String(Math.round(num));
+    if (E.score.textContent !== shown) E.score.textContent = shown;
+    setAttr(E.score, 'fill', num < 0 ? '#ff6b6b' : '#fff');
+  }
+
+  // Glühender Rahmen ums aktive Stück (eigene Ebene → "atmet" per GPU)
+  if (activeIdx !== null && sliceEls[activeIdx] && pieAnim[activeIdx]) {
+    const { s, e } = sliceAngles(activeIdx, now);
+    const a = pieAnim[activeIdx];
+    setAttr(glowPath, 'd', arc(s, e, R_OUT + 1.5, R_IN - 1.5));
+    setAttr(glowG, 'transform', `translate(${a.dx.toFixed(2)} ${a.dy.toFixed(2)})`);
+    glowSvg.style.display = '';
+  } else {
+    glowSvg.style.display = 'none';
+  }
+
+  if (arrowG) {
+    const ang = (anim && arrowShown !== null) ? arrowShown : arrowTargetAngle(now);
+    setAttr(arrowG, 'transform', `rotate(${ang.toFixed(2)} 200 200)`);
+  }
+  if (centerG) {
+    let sx = 1;
+    if (anim && centerFlipT0 >= 0) sx = Math.cos(clamp((now - centerFlipT0) / 520, 0, 1) * Math.PI * 2);
+    setAttr(centerG, 'transform', sx === 1 ? 'translate(0 0)' : `translate(200 0) scale(${sx.toFixed(3)} 1) translate(-200 0)`);
+  }
+  // Chip zählt synchron mit der Torte mit
+  if (activeIdx !== null && state.players[activeIdx]) {
+    const v = String(Math.round(anim && pieAnim[activeIdx] ? pieAnim[activeIdx].num : state.players[activeIdx].score));
+    if (chipScore.textContent !== v) chipScore.textContent = v;
+  }
+}
+
+// ── Physik-Schritt (läuft im FX-Loop) ─────────────────
+function pieStep(dt, now) {
+  pieCTM = null;
+  if (!ANIM.on || !state.players.length || !sliceEls.length) return false;
+  let active = false;
+  const n = state.players.length;
+  for (let i = 0; i < n; i++) {
+    const a = pieAnim[i];
+    if (!a) continue;
+    const goal = state.players[i].score - (inflight[i] || 0);
+    const dn = goal - a.num;                                   // Zahl zählt weich mit
+    if (dn !== 0) { a.num += dn * (1 - Math.exp(-dt * 11)); if (Math.abs(goal - a.num) < 0.35) a.num = goal; active = true; }
+    const df = goal - a.fill;                                  // Füllung: Feder mit Überschwingen
+    a.fillVel += (df * 150 - a.fillVel * 13) * dt; a.fill += a.fillVel * dt;
+    if (Math.abs(df) < 0.05 && Math.abs(a.fillVel) < 0.1) { a.fill = goal; a.fillVel = 0; } else active = true;
+    const pt = i === activeIdx ? 1 : 0;                        // Auswahl-Pop
+    a.popVel += ((pt - a.pop) * 320 - a.popVel * 19) * dt; a.pop += a.popVel * dt;
+    if (Math.abs(pt - a.pop) < 0.002 && Math.abs(a.popVel) < 0.01) { a.pop = pt; a.popVel = 0; } else active = true;
+    a.kickVel += (-a.kick * 420 - a.kickVel * 15) * dt; a.kick += a.kickVel * dt;   // Einschlag-Rückstoß
+    if (Math.abs(a.kick) < 0.01 && Math.abs(a.kickVel) < 0.05) { a.kick = 0; a.kickVel = 0; } else active = true;
+    if (a.wave > 0.04) { a.wave *= Math.exp(-dt * 2.4); a.phase += dt * 9; active = true; } else a.wave = 0;
+    if (a.pulse > 0.01) { a.pulse *= Math.exp(-dt * 7); active = true; } else a.pulse = 0;
+    if (a.shake > 0.01) { a.shake = Math.max(0, a.shake - dt * 1.8); active = true; } else a.shake = 0;
+    if (a.flash > 0.01) { a.flash *= Math.exp(-dt * 4); active = true; } else a.flash = 0;
+  }
+  const tgt = arrowTargetAngle(now);
+  if (arrowShown === null) arrowShown = tgt;
+  if (Math.abs(tgt - arrowShown) > 0.05) { arrowShown += (tgt - arrowShown) * (1 - Math.exp(-dt * 10)); active = true; }
+  else arrowShown = tgt;
+  if (layoutAnim) { if (now - layoutAnim.t0 >= layoutAnim.dur) { layoutAnim = null; updateHalo(true); } active = true; }
+  if (pieIntro) { if (now - pieIntro.t0 > 700 + n * 45) pieIntro = null; active = true; }
+  if (centerFlipT0 >= 0) { if (now - centerFlipT0 > 540) centerFlipT0 = -1; active = true; }
+  if (active || pieWasActive) drawPie(now);
+  pieWasActive = active;
+  return active;
+}
+FX.hook(pieStep);
+
+// ── Effekte beim Punkte-Eintragen ─────────────────────
+function elCenter(el) { const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }
+
+// Funken fliegen von der Eingabe zum Tortenstück; jeder Einschlag füllt ein Stück nach
+function launchSparks(i, val, src) {
+  const color = state.players[i].color;
+  const n = clamp(Math.round(5 + Math.sqrt(val) * 2.6), 6, 40);
+  const burst = { left: val, remaining: n, val, onDone: null };
+  inflight[i] += val;
+  fxRing(src.x, src.y, color, 34, 0.38, 2.5);
+  fxEmbers(src.x, src.y, color, 10, 240, { dur: 0.35 });
+  for (let k = 0; k < n; k++) {
+    const ang = -Math.PI / 2 + (Math.random() - 0.5) * 2.8;
+    const sp = 60 + Math.random() * 140;
+    const x0 = src.x + (Math.random() - 0.5) * 26, y0 = src.y + (Math.random() - 0.5) * 12;
+    const frac = 0.12 + Math.random() * 0.76;
+    FX.add({
+      type: 'spark', player: i, burst, amount: val / n,
+      x0, y0, x: x0, y: y0,
+      c1x: x0 + Math.cos(ang) * sp * 1.5, c1y: y0 + Math.sin(ang) * sp * 1.5 - 50,
+      app: 50 + Math.random() * 100,
+      t: -(k * 0.02 + Math.random() * 0.05), dur: 0.5 + Math.random() * 0.28,
+      color, size: 2 + Math.random() * 2.2, trail: [],
+      tgt: () => sparkTarget(i, frac),
+      onArrive: sparkArrive
+    });
+  }
+  return burst;
+}
+function sparkArrive(p, T) {
+  const b = p.burst, i = p.player, a = pieAnim[i];
+  if (!b || !a || b.cancelled) return;
+  inflight[i] = Math.max(0, inflight[i] - p.amount);
+  b.left -= p.amount; b.remaining--;
+  a.wave = Math.min(a.wave + 1.1, 6); a.kickVel += 24; a.pulse = 1;
+  fxEmbers(T.x, T.y, p.color, 2, 110, { dir: Math.atan2(T.ny, T.nx), spread: 2.4, dur: 0.3 });
+  if (b.remaining <= 0) {
+    inflight[i] = Math.max(0, inflight[i] - Math.max(0, b.left));
+    if (inflight[i] < 1e-6) inflight[i] = 0;
+    b.left = 0;
+    const q = sparkTarget(i, 0.5);
+    const pl = state.players[i];
+    spawnLabel(i, `+${b.val}`, pl.color, b.val >= 40);
+    fxRing(q.x, q.y, pl.color, 26 + Math.min(44, b.val * 0.6), 0.55, 3);
+    if (b.val >= 30) fxEmbers(q.x, q.y, pl.color, 16, 260, { dir: Math.atan2(q.ny, q.nx), spread: 2.6, dur: 0.6 });
+    a.wave = Math.min(a.wave + 2.2, 7);
+    if (b.onDone) b.onDone();
+  }
+}
+// Minuspunkte: Splitter brechen aus dem Stück, es "saugt" sich zusammen
+function drainFx(i, val) {
+  const p = state.players[i], a = pieAnim[i];
+  const n = clamp(Math.round(6 + Math.sqrt(-val) * 2), 6, 26);
+  for (let k = 0; k < n; k++) {
+    const q = sparkTarget(i, Math.random());
+    const dir = Math.atan2(q.ny, q.nx) + (Math.random() - 0.5) * 1.3;
+    const sp = 80 + Math.random() * 170;
+    FX.add({ type: 'ember', x: q.x, y: q.y, vx: Math.cos(dir) * sp, vy: Math.sin(dir) * sp - 60, grav: 560, drag: 0.97,
+      size: 1.6 + Math.random() * 1.8, dur: 0.7 + Math.random() * 0.4, age: -Math.random() * 0.08, color: Math.random() < 0.5 ? p.color : '#ff5050' });
+  }
+  a.flash = 1; a.wave = Math.min(a.wave + 3, 7); a.kickVel -= 45;
+  spawnLabel(i, `−${Math.abs(val)}`, '#ff6b6b', Math.abs(val) >= 40);
+}
+// 0 Punkte (Bust): Rauchwölkchen + Kopfschütteln
+function bustFx(i, src) {
+  fxPuff(src.x, src.y - 4, 8);
+  pieAnim[i].shake = 1;
+  spawnLabel(i, '0', '#9a99b5', false);
+}
+function spawnLabel(i, text, color, big) {
+  if (!ANIM.on) return;
+  const stage = $('pie-stage');
+  const sc = stage.clientWidth / 400;
+  const { s, e } = sliceAngles(i, performance.now());
+  const pt = polar((s + e) / 2, R_IN + (R_OUT - R_IN) * 0.62);
+  const a = pieAnim[i] || {};
+  const el = document.createElement('div');
+  el.className = 'float-label' + (big ? ' big' : '');
+  el.style.cssText = `--c:${color};left:${((pt.x + (a.dx || 0)) * sc).toFixed(1)}px;top:${((pt.y + (a.dy || 0)) * sc).toFixed(1)}px`;
+  el.textContent = text;
+  $('pie-labels').appendChild(el);
+  setTimeout(() => el.remove(), 1150);
+}
+
+// ── Farbiger Halo hinter der Torte (einmal zeichnen, dann per CSS "atmen") ──
+let haloKey = '';
+function updateHalo(force) {
+  if (!ANIM.on) return;
+  const cv = $('pie-halo'), stage = $('pie-stage');
+  const S = stage.clientWidth;
+  if (!S || !state.players.length) return;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const px = Math.round(S * 1.3 * dpr * 0.5);   // halbe Auflösung reicht – ist eh unscharf
+  const key = state.players.map(p => p.color).join() + '|' + px;
+  if (!force && key === haloKey) return;
+  haloKey = key;
+  cv.width = cv.height = px;
+  const ctx = cv.getContext('2d');
+  const c = px / 2, sc = px / 520;
+  ctx.clearRect(0, 0, px, px);
+  ctx.filter = `blur(${Math.max(4, Math.round(18 * sc))}px)`;
+  const n = state.players.length;
+  state.players.forEach((p, i) => {
+    const s = (i * 360 / n - 90) * Math.PI / 180, e = ((i + 1) * 360 / n - 90) * Math.PI / 180;
+    ctx.beginPath(); ctx.moveTo(c, c); ctx.arc(c, c, R_OUT * sc * 1.08, s, e); ctx.closePath();
+    ctx.fillStyle = p.color; ctx.fill();
+  });
+  ctx.filter = 'none';
+  // Innenbereich ausstanzen → Halo leuchtet nur außen, leere Stücke bleiben dunkel
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.beginPath(); ctx.arc(c, c, (R_OUT - 1) * sc, 0, Math.PI * 2); ctx.fill();
+  ctx.globalCompositeOperation = 'source-over';
+}
+// Hintergrund-Wolke färbt sich in der Farbe der Führenden
+function updateAmbientColor() {
+  let col = '#ff6b35';
+  if (document.body.dataset.screen === 'game' && state.players.length) {
+    const max = Math.max(...state.players.map(p => p.score));
+    if (max > 0) col = state.players.find(p => p.score === max).color;
+  }
+  document.documentElement.style.setProperty('--glow1', col);
+}
+
+// ── Pie sizing ─────────────────────────────────────────
+function sizePie() {
+  const wrap = $('pie-wrap');
+  const w = wrap.clientWidth - 12;
+  const h = wrap.clientHeight - 12;
+  const sz = Math.max(60, Math.min(w, h, 420));
+  const stage = $('pie-stage');
+  stage.style.width = sz + 'px';
+  stage.style.height = sz + 'px';
+  pieCTM = null;
+}
+</script>
+
+<script>
+// ══════════════════════════════════════════════════════
+// COLOR-PICKER: Quadrat (Sättigung × Helligkeit) + Farbton-
+// Regler daneben + Schnellauswahl. Ersetzt den System-Dialog
+// mit den drei RGB-Reglern. CP.open(hex, benutzteFarben) → Promise
+// ══════════════════════════════════════════════════════
+const CP = (() => {
+  const sheet = $('cp-sheet'), card = sheet.querySelector('.cp-card');
+  const sv = $('cpSV'), hue = $('cpHue');
+  const svThumb = sv.querySelector('.cp-sv-thumb'), hueThumb = hue.querySelector('.cp-hue-thumb');
+  const hexEl = $('cpHex'), warnEl = $('cpWarn'), presetsEl = $('cpPresets');
+  let h = 0, s = 1, v = 1, resolveFn = null;
+
+  function hsvToHex(H, S, V) {
+    const f = n => { const k = (n + H / 60) % 6; return V - V * S * Math.max(0, Math.min(k, 4 - k, 1)); };
+    const to = x => Math.round(x * 255).toString(16).padStart(2, '0');
+    return '#' + to(f(5)) + to(f(3)) + to(f(1));
+  }
+  function hexToHsv(hex) {
+    const { r, g, b } = hexToRgb(hex);
+    const R = r / 255, G = g / 255, B = b / 255;
+    const max = Math.max(R, G, B), min = Math.min(R, G, B), d = max - min;
+    let H = 0;
+    if (d) {
+      if (max === R) H = ((G - B) / d) % 6;
+      else if (max === G) H = (B - R) / d + 2;
+      else H = (R - G) / d + 4;
+      H *= 60; if (H < 0) H += 360;
+    }
+    return { h: H, s: max ? d / max : 0, v: max };
+  }
+  const current = () => hsvToHex(h, s, v);
+
+  function paint() {
+    const hex = current();
+    card.style.setProperty('--h', h.toFixed(1));
+    card.style.setProperty('--c', hex);
+    svThumb.style.left = (s * 100) + '%';
+    svThumb.style.top = ((1 - v) * 100) + '%';
+    hueThumb.style.top = (h / 360 * 100) + '%';
+    hexEl.textContent = hex.toUpperCase();
+    warnEl.textContent = luminance(hex) < 0.03 ? '⚠ Sehr dunkel – auf dem dunklen Hintergrund schwer lesbar' : '';
+    presetsEl.querySelectorAll('.cp-sw').forEach(b => b.classList.toggle('sel', b.dataset.c === hex.toLowerCase()));
+  }
+
+  // Ziehen per Pointer-Events (Touch + Maus), Finger darf das Feld verlassen
+  function draggable(el, onMove) {
+    el.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      try { el.setPointerCapture(e.pointerId); } catch (err) {}
+      el.classList.add('dragging');
+      const move = ev => {
+        const r = el.getBoundingClientRect();
+        onMove(clamp((ev.clientX - r.left) / r.width, 0, 1), clamp((ev.clientY - r.top) / r.height, 0, 1));
+        paint();
+      };
+      const up = () => {
+        el.classList.remove('dragging');
+        el.removeEventListener('pointermove', move);
+        el.removeEventListener('pointerup', up);
+        el.removeEventListener('pointercancel', up);
+      };
+      move(e);
+      el.addEventListener('pointermove', move);
+      el.addEventListener('pointerup', up);
+      el.addEventListener('pointercancel', up);
+    });
+  }
+  draggable(sv, (x, y) => { s = x; v = 1 - y; });
+  draggable(hue, (x, y) => { h = Math.min(359.9, y * 360); });
+
+  presetsEl.addEventListener('click', e => {
+    const b = e.target.closest('.cp-sw');
+    if (!b) return;
+    ({ h, s, v } = hexToHsv(b.dataset.c));
+    paint();
+  });
+
+  function open(hex, used = []) {
+    if (resolveFn) resolveFn(null);
+    return new Promise(res => {
+      resolveFn = res;
+      const old = hex || '#ffffff';
+      ({ h, s, v } = hexToHsv(old));
+      card.style.setProperty('--old', old);
+      const usedSet = new Set(used.filter(Boolean).map(c => c.toLowerCase()));
+      presetsEl.innerHTML = COLORS.map(c =>
+        `<button type="button" class="cp-sw${usedSet.has(c) ? ' used' : ''}" data-c="${c}" style="--c:${c}" aria-label="${c}"></button>`).join('');
+      clearTimeout(sheet._t);
+      sheet.classList.remove('closing');
+      sheet.classList.add('open');
+      if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); // Tastatur weg
+      paint();
+    });
+  }
+  function close(result) {
+    if (!sheet.classList.contains('open')) return;
+    const r = resolveFn; resolveFn = null;
+    clearTimeout(sheet._t);
+    if (ANIM.on) {
+      sheet.classList.add('closing');
+      sheet._t = setTimeout(() => sheet.classList.remove('open', 'closing'), 230);
+    } else sheet.classList.remove('open');
+    if (r) r(result);
+  }
+  $('cpOk').onclick = () => close(current());
+  $('cpCancel').onclick = () => close(null);
+  $('cpBackdrop').onclick = () => close(null);
+  return { open };
+})();
+
+// ══════════════════════════════════════════════════════
+// MEDAILLEN
+// ══════════════════════════════════════════════════════
 // Speichert Gold/Silber/Bronze pro Spielername in localStorage.
 // Format: flip7_medals_<normalizedName> = JSON {gold,silver,bronze}
 function getMedals(nameKey) {
@@ -445,227 +2110,170 @@ function addMedal(name, type) {
   localStorage.setItem(`flip7_medals_${nk}`, JSON.stringify(m));
 }
 
-// Öffnet das Siegerehrung-Modal: vergibt Medaillen an Top-3 und zeigt Podium
-function openSiegerehrung() {
-  if (!state.players.length) return;
-  // Spieler nach Score sortieren (absteigend), Original-Index merken
-  const ranked = state.players
-    .map((p, i) => ({ ...p, origIdx: i }))
-    .sort((a, b) => b.score - a.score);
-
-  const medals = ['gold', 'silver', 'bronze'];
-  const awarded = [];
-  // Bei Gleichstand gleiche Medaille, aber max. 3 verschiedene Ränge
-  let lastScore = null, rank = -1;
-  ranked.forEach((p, i) => {
-    if (p.score !== lastScore) { rank++; lastScore = p.score; }
-    if (rank < 3) {
-      addMedal(p.name, medals[rank]);
-      awarded.push({ ...p, medal: medals[rank], rank });
-    }
-  });
-
-  // Podium rendern: Silber links (order:1), Gold Mitte (order:2), Bronze rechts (order:3)
-  const wrap = document.getElementById('podium-wrap');
-  wrap.innerHTML = '';
-  const medalEmoji = { gold: '🥇', silver: '🥈', bronze: '🥉' };
-  const medalLabel = { gold: '1.', silver: '2.', bronze: '3.' };
-
-  // Sicherstellen dass auch bei <3 Spielern kein Crash passiert
-  ['silver','gold','bronze'].forEach(type => {
-    const p = awarded.find(a => a.medal === type);
-    if (!p) return;
-    const slot = document.createElement('div');
-    slot.className = `podium-slot slot-${type}`;
-    slot.innerHTML = `
-      <div class="podium-name" style="color:${p.color}">${esc(p.name)}</div>
-      <div class="podium-score">${p.score} Pkt</div>
-      <div class="podium-medal">${medalEmoji[type]}</div>
-      <div class="podium-block ${type}">${medalLabel[type]}</div>`;
-    wrap.appendChild(slot);
-  });
-
-  overlay.classList.add('active');
-  document.getElementById('sieger-modal').classList.add('open');
-  // Konfetti in der Siegerfarbe
-  const winner = awarded.find(a => a.medal === 'gold');
-  if (winner) launchConfetti(winner.color);
-
-  // Setup-Badges aktualisieren (damit beim nächsten Öffnen die neuen Medaillen sichtbar sind)
-  renderNameInputs();
-}
-
-
-function toggleSchnell() {
-  const cb = document.getElementById('schnellrunde');
-  const inp = document.getElementById('zielpunkte');
-  const label = document.querySelector('.mode-label span');
-  if (cb.checked) {
-    inp.style.display = 'block';
-    inp.focus();
-    inp.select();
-    label.textContent = 'Eigenes Punkteziel:';
-  } else {
-    inp.style.display = 'none';
-    label.textContent = 'Standard: 200 Punkte';
-  }
-}
-
-// ── Setup ──────────────────────────────────────────────
+// ══════════════════════════════════════════════════════
+// SETUP
+// ══════════════════════════════════════════════════════
 let numPlayers = 3;
-const playerCountEl = document.getElementById('playerCount');
-const namesListEl   = document.getElementById('namesList');
+const playerCountEl = $('playerCount');
+const namesListEl = $('namesList');
 
-function renderNameInputs() {
+// Priorität: 1) zuletzt verwendete Farbe für diesen Namen, 2) zuletzt für diesen Slot, 3) Default
+function savedRowData(i) {
+  const savedName = localStorage.getItem(`flip7_player_${i}`) || '';
+  const nameKey = savedName ? normalizeName(savedName.trim()) : null;
+  const byName = nameKey ? localStorage.getItem(`flip7_color_name_${nameKey}`) : null;
+  const bySlot = localStorage.getItem(`flip7_color_${i}`);
+  return { name: savedName, color: byName || bySlot || COLORS[i % COLORS.length] };
+}
+function setRowColor(row, color, animate = true) {
+  row.dataset.color = color;
+  const sw = row.querySelector('.color-swatch');
+  sw.style.background = color;
+  sw.style.setProperty('--sw', color);
+  row.style.setProperty('--rc', color);
+  row.style.setProperty('--rc-a', rgba(color, 0.25));
+  if (animate) retrigger(sw, 'pop');
+}
+const activeRows = () => [...namesListEl.querySelectorAll('.name-row:not(.leaving)')];
+
+function createNameRow(i, data) {
+  const row = document.createElement('div');
+  row.className = 'name-row';
+
+  // ── Drag-Handle (Griff zum Sortieren der Spielerreihenfolge) ──
+  const handle = document.createElement('button');
+  handle.type = 'button';
+  handle.className = 'drag-handle';
+  handle.title = 'Reihenfolge ändern';
+  handle.textContent = '⠿';
+  row.appendChild(handle);
+
+  const inp = document.createElement('input');
+  inp.className = 'name-input';
+  inp.placeholder = `Spieler:in ${i + 1}`;
+  inp.maxLength = 12;
+  inp.value = data.name || '';
+
+  // Farbfeld → öffnet den neuen Color-Picker
+  const sw = document.createElement('button');
+  sw.type = 'button';
+  sw.className = 'color-swatch';
+  sw.setAttribute('aria-label', 'Farbe wählen');
+  sw.addEventListener('click', () => {
+    const used = activeRows().filter(r => r !== row).map(r => r.dataset.color);
+    CP.open(row.dataset.color, used).then(c => { if (c) setRowColor(row, c); });
+  });
+
+  // Medal badge: zeigt gesammelte 🥇🥈🥉 für diesen Spielernamen
+  const medalBadge = document.createElement('div');
+  medalBadge.className = 'medal-badge';
+  const updateMedalBadge = () => {
+    const nk = normalizeName(inp.value.trim()) || `p${i}`;
+    const m = getMedals(nk);
+    let html = '';
+    if (m.gold)   html += `<span class="medal-chip">🥇<span class="medal-count">${m.gold > 1 ? m.gold : ''}</span></span>`;
+    if (m.silver) html += `<span class="medal-chip">🥈<span class="medal-count">${m.silver > 1 ? m.silver : ''}</span></span>`;
+    if (m.bronze) html += `<span class="medal-chip">🥉<span class="medal-count">${m.bronze > 1 ? m.bronze : ''}</span></span>`;
+    medalBadge.innerHTML = html || '<span style="color:var(--border);font-size:0.6rem">—</span>';
+  };
+  updateMedalBadge();
+  inp.addEventListener('input', () => {
+    updateMedalBadge();
+    // Wenn für diesen Namen eine gespeicherte Farbe existiert, automatisch setzen
+    const nk = normalizeName(inp.value.trim());
+    if (nk) {
+      const remembered = localStorage.getItem(`flip7_color_name_${nk}`);
+      if (remembered && remembered !== row.dataset.color) setRowColor(row, remembered);
+    }
+    if (/^die rote$/i.test(inp.value.trim())) setRowColor(row, '#ff0000');
+  });
+
+  row.appendChild(inp);
+  row.appendChild(medalBadge);
+  row.appendChild(sw);
+  setRowColor(row, data.color, false);
+  enableDrag(handle, row, namesListEl);
+  return row;
+}
+
+function renderNameInputs(animate = false) {
   namesListEl.innerHTML = '';
   for (let i = 0; i < numPlayers; i++) {
-    const row = document.createElement('div');
-    row.className = 'name-row';
-
-    // ── Drag-Handle (Griff zum Sortieren der Spielerreihenfolge) ──
-    const handle = document.createElement('button');
-    handle.className = 'drag-handle';
-    handle.title = 'Reihenfolge ändern';
-    handle.textContent = '⠿';
-    row.appendChild(handle);
-
-    const inp = document.createElement('input');
-    inp.className = 'name-input';
-    inp.placeholder = `Spieler ${i+1}`;
-    inp.maxLength = 12;
-    const saved = localStorage.getItem(`flip7_player_${i}`);
-    if (saved) inp.value = saved;
-
-    // Color swatch
-    // Priorität: 1) zuletzt verwendete Farbe für diesen Namen, 2) zuletzt für diesen Slot, 3) Default
-    const savedName = localStorage.getItem(`flip7_player_${i}`);
-    const nameKey = savedName ? normalizeName(savedName.trim()) : null;
-    const savedColorByName = nameKey ? localStorage.getItem(`flip7_color_name_${nameKey}`) : null;
-    const savedColorBySlot = localStorage.getItem(`flip7_color_${i}`);
-    const defaultColor = COLORS[i % COLORS.length];
-    const currentColor = savedColorByName || savedColorBySlot || defaultColor;
-
-    // Swatch + Picker in einem Wrapper – Picker liegt transparent drüber (iOS-kompatibel)
-    const swatchWrap = document.createElement('div');
-    swatchWrap.className = 'color-swatch-wrap';
-    const swatch = document.createElement('div');
-    swatch.className = 'color-swatch';
-    swatch.style.background = currentColor;
-
-    const picker = document.createElement('input');
-    picker.type = 'color';
-    picker.className = 'color-picker-hidden';
-    picker.value = currentColor;
-    picker.addEventListener('input', () => { swatch.style.background = picker.value; });
-    swatchWrap.appendChild(swatch);
-    swatchWrap.appendChild(picker);
-
-    // Medal badge: zeigt gesammelte 🥇🥈🥉 für diesen Spielernamen
-    const medalBadge = document.createElement('div');
-    medalBadge.className = 'medal-badge';
-    const updateMedalBadge = () => {
-      const nk = normalizeName(inp.value.trim()) || `p${i}`;
-      const m = getMedals(nk);
-      let html = '';
-      if (m.gold)   html += `<span class="medal-chip">🥇<span class="medal-count">${m.gold > 1 ? m.gold : ''}</span></span>`;
-      if (m.silver) html += `<span class="medal-chip">🥈<span class="medal-count">${m.silver > 1 ? m.silver : ''}</span></span>`;
-      if (m.bronze) html += `<span class="medal-chip">🥉<span class="medal-count">${m.bronze > 1 ? m.bronze : ''}</span></span>`;
-      medalBadge.innerHTML = html || '<span style="color:var(--border);font-size:0.6rem">—</span>';
-    };
-    updateMedalBadge();
-    inp.addEventListener('input', () => {
-      updateMedalBadge();
-      // Wenn für diesen Namen eine gespeicherte Farbe existiert, automatisch setzen
-      const nk = normalizeName(inp.value.trim());
-      if (nk) {
-        const rememberedColor = localStorage.getItem(`flip7_color_name_${nk}`);
-        if (rememberedColor) { picker.value = rememberedColor; swatch.style.background = rememberedColor; }
-      }
-      if (/^die rote$/i.test(inp.value.trim())) {
-        picker.value = '#ff0000'; swatch.style.background = '#ff0000';
-      }
-    });
-    picker.addEventListener('input', updateMedalBadge);
-
-    row.appendChild(inp);
-    row.appendChild(medalBadge);
-    row.appendChild(swatchWrap);
-    enableDrag(handle, row, namesListEl);
+    const row = createNameRow(i, savedRowData(i));
+    if (animate && ANIM.on) { row.classList.add('enter'); row.style.setProperty('--i', i); }
     namesListEl.appendChild(row);
   }
 }
 // Restore last player count
 const savedCount = localStorage.getItem('flip7_player_count');
-if (savedCount) { numPlayers = parseInt(savedCount); playerCountEl.textContent = numPlayers; }
-renderNameInputs();
+if (savedCount) { numPlayers = clamp(parseInt(savedCount, 10) || 3, 2, 18); playerCountEl.textContent = numPlayers; }
+renderNameInputs(true);
 
-document.getElementById('decBtn').onclick = () => { if (numPlayers>2){numPlayers--;playerCountEl.textContent=numPlayers;renderNameInputs();}};
-document.getElementById('incBtn').onclick = () => { if (numPlayers<18){numPlayers++;playerCountEl.textContent=numPlayers;renderNameInputs();}};
-
-document.getElementById('startBtn').onclick = () => {
-  const rows = namesListEl.querySelectorAll('.name-row');
-  state.players = Array.from(rows).map((row,i) => {
-    const inp    = row.querySelector('.name-input');
-    const picker = row.querySelector('input[type=color]');
-    const name = inp.value.trim() || `P${i+1}`;
-    if (/^die rote$/i.test(name)) { picker.value = '#ff0000'; const sw = row.querySelector('.color-swatch'); if(sw) sw.style.background='#ff0000'; }
-    const color  = picker ? picker.value : COLORS[i % COLORS.length];
-    localStorage.setItem(`flip7_player_${i}`, inp.value.trim());
-    localStorage.setItem(`flip7_color_${i}`, color);
-    localStorage.setItem(`flip7_color_name_${normalizeName(name)}`, color); // Farbe per Name merken
-    return { name, score: 0, color };
-  });
-  // Also save the player count
-  localStorage.setItem('flip7_player_count', numPlayers);
-  const cb = document.getElementById('schnellrunde');
-  const zielVal = parseInt(document.getElementById('zielpunkte').value, 10);
-  state.schnell = cb.checked;
-  state.ziel = (cb.checked && !isNaN(zielVal) && zielVal > 0) ? zielVal : 200;
-  state.history = [];
-  confettiFired.clear();
-  document.getElementById('setup').style.display = 'none';
-  document.getElementById('game').style.display = 'flex';
-  const badge = document.getElementById('mode-badge');
-  if (state.schnell) {
-    badge.style.display = 'inline';
-    badge.textContent = `⚡${state.ziel}P`;
-  } else {
-    badge.style.display = 'none';
-  }
-  sizePie();
-  renderPie();
-  startClock(); // Uhrzeit-Anzeige starten
+// +/−: nur eine Zeile hinzufügen/entfernen (bereits getippte Namen bleiben erhalten)
+$('decBtn').onclick = () => {
+  if (numPlayers <= 2) return;
+  numPlayers--;
+  playerCountEl.textContent = numPlayers;
+  retrigger(playerCountEl, 'bump');
+  const rows = activeRows();
+  const last = rows[rows.length - 1];
+  if (!last) return;
+  if (ANIM.on) { last.classList.remove('enter'); last.classList.add('leaving'); setTimeout(() => last.remove(), 240); }
+  else last.remove();
+};
+$('incBtn').onclick = () => {
+  if (numPlayers >= 18) return;
+  numPlayers++;
+  playerCountEl.textContent = numPlayers;
+  retrigger(playerCountEl, 'bump');
+  const row = createNameRow(numPlayers - 1, savedRowData(numPlayers - 1));
+  if (ANIM.on) row.classList.add('enter');
+  namesListEl.appendChild(row);
 };
 
-// ── Pie sizing ─────────────────────────────────────────
-function sizePie() {
-  const wrap = document.getElementById('pie-wrap');
-  const svgEl = document.getElementById('pie-svg');
-  const w = wrap.clientWidth  - 12;
-  const h = wrap.clientHeight - 12;
-  const sz = Math.min(w, h, 420);
-  svgEl.style.width  = sz + 'px';
-  svgEl.style.height = sz + 'px';
+// ── Optionen ────────────────────────────────────────────
+function toggleSchnell() {
+  const cb = $('schnellrunde');
+  const inp = $('zielpunkte');
+  const label = $('zielLabel');
+  if (cb.checked) {
+    inp.classList.add('show');
+    inp.focus();
+    inp.select();
+    label.textContent = 'Eigenes Punkteziel:';
+  } else {
+    inp.classList.remove('show');
+    label.textContent = 'Standard: 200 Punkte';
+  }
 }
-window.addEventListener('resize', () => { sizePie(); renderPie(); });
+$('schnellrunde').addEventListener('change', toggleSchnell);
 
-// ── Back to setup ──────────────────────────────────────────
-document.getElementById('back-to-setup').addEventListener('click', () => {
-  document.getElementById('game').style.display = 'none';
-  document.getElementById('setup').style.display = 'flex';
-  activeIdx = null;
-  stopClock(); // Uhrzeit-Interval stoppen
-  // hide input bar elements
-  document.getElementById('no-player-hint').style.display = 'block';
-  document.getElementById('delta-input').style.display = 'none';
-  document.getElementById('add-btn').style.display = 'none';
-  document.getElementById('sub-btn').style.display = 'none';
+const animCb = $('animOff');
+animCb.checked = !ANIM.on;
+animCb.addEventListener('change', () => {
+  setAnimOff(animCb.checked);
+  if (animCb.checked) showToast('Animationen aus');
+  else { showToast('✨ Animationen an'); retrigger($('setupInner'), 'enter'); }
 });
+
+// Schwebende Karten im Hintergrund des Startscreens
+(function initFloatCards() {
+  const cols = ['#ff6b35', '#4dbfb8', '#e8c04a', '#9b7fe8', '#e8708a', '#6aaee8', '#a0c878'];
+  let html = '';
+  for (let k = 0; k < 9; k++) {
+    const left = 3 + k * 10.5 + Math.random() * 4;
+    html += `<div class="fcard" style="left:${left.toFixed(1)}%;--c:${cols[k % cols.length]};--dur:${(15 + Math.random() * 12).toFixed(1)}s;` +
+            `--delay:${(-Math.random() * 24).toFixed(1)}s;--r0:${Math.round(Math.random() * 60 - 30)}deg;--r1:${Math.round(Math.random() * 140 - 70)}deg;` +
+            `--dx:${Math.round(Math.random() * 90 - 45)}px">${Math.floor(Math.random() * 13)}</div>`;
+  }
+  $('floatCards').innerHTML = html;
+})();
 
 // ── Drag-and-Drop Sortierung (Setup-Namensliste) ───────────
 // Pointer-Events statt HTML5-Drag, damit es auf Android-Touch zuverlässig funktioniert.
 // Das gezogene Element wird per translateY verschoben; eine farbige Linie
 // (box-shadow via CSS-Klasse drop-before/drop-after) zeigt die Zielposition an.
+// Beim Loslassen gleiten die Zeilen per FLIP-Animation an ihren neuen Platz.
 function enableDrag(handle, row, listEl) {
   handle.addEventListener('pointerdown', e => {
     e.preventDefault();
@@ -675,7 +2283,7 @@ function enableDrag(handle, row, listEl) {
     row.classList.add('is-dragging');
 
     function onMove(e) {
-      row.style.transform = `translateY(${e.clientY - startY}px)`;
+      row.style.transform = `translateY(${e.clientY - startY}px) scale(1.03)`;
       row.style.position  = 'relative';
       row.style.zIndex    = '50';
 
@@ -692,10 +2300,14 @@ function enableDrag(handle, row, listEl) {
       }
     }
 
-    function onUp(e) {
+    function onUp() {
       handle.removeEventListener('pointermove', onMove);
       handle.removeEventListener('pointerup',   onUp);
       handle.removeEventListener('pointercancel', onUp);
+
+      const allRows = Array.from(listEl.querySelectorAll('.name-row'));
+      // Positionen VOR dem Umsortieren merken (für die Gleit-Animation)
+      const first = new Map(allRows.map(r => [r, r.getBoundingClientRect().top]));
 
       // Visuellen Zustand zurücksetzen
       row.classList.remove('is-dragging');
@@ -704,7 +2316,6 @@ function enableDrag(handle, row, listEl) {
       row.style.zIndex    = '';
 
       // Zielposition ermitteln und Zeile im DOM verschieben
-      const allRows = Array.from(listEl.querySelectorAll('.name-row'));
       let dropTarget = null, insertBefore = true;
       for (const r of allRows) {
         if (r.classList.contains('drop-before')) { dropTarget = r; insertBefore = true;  break; }
@@ -715,6 +2326,13 @@ function enableDrag(handle, row, listEl) {
       if (dropTarget && dropTarget !== row) {
         listEl.insertBefore(row, insertBefore ? dropTarget : dropTarget.nextSibling);
       }
+      if (ANIM.on && row.animate) {
+        allRows.forEach(r => {
+          const dy = first.get(r) - r.getBoundingClientRect().top;
+          if (Math.abs(dy) > 0.5) r.animate([{ transform: `translateY(${dy}px)` }, { transform: 'none' }],
+            { duration: 340, easing: 'cubic-bezier(.34,1.56,.64,1)' });
+        });
+      }
     }
 
     handle.addEventListener('pointermove',  onMove);
@@ -722,17 +2340,111 @@ function enableDrag(handle, row, listEl) {
     handle.addEventListener('pointercancel', onUp);
   });
 }
+</script>
+
+<script>
+// ══════════════════════════════════════════════════════
+// SPIEL
+// ══════════════════════════════════════════════════════
+const chipName   = $('chip-name');
+const chipScore  = $('chip-score');
+const chip       = $('active-chip');
+const hint       = $('no-player-hint');
+const deltaInput = $('delta-input');
+const addBtn     = $('add-btn');
+const subBtn     = $('sub-btn');
+const inputBar   = $('input-bar');
+
+function setModeBadge() {
+  const badge = $('mode-badge');
+  if (state.schnell) { badge.style.display = 'inline'; badge.textContent = `⚡${state.ziel}P`; }
+  else badge.style.display = 'none';
+}
+
+// Spiel-Screen zeigen (intro = Torte fliegt animiert ein)
+function showGame(intro, instantSetupHide = false) {
+  const setup = $('setup'), game = $('game');
+  document.body.dataset.screen = 'game';
+  game.style.display = 'flex';
+  if (ANIM.on && intro && !instantSetupHide) {
+    setup.classList.add('leaving');
+    setTimeout(() => { setup.style.display = 'none'; setup.classList.remove('leaving'); }, 320);
+    retrigger(game, 'enter');
+  } else {
+    setup.style.display = 'none';
+    if (ANIM.on && intro) retrigger(game, 'enter');
+  }
+  setModeBadge();
+  if (startPlayerIdx >= state.players.length) startPlayerIdx = 0;
+  resetPieAnim();
+  sizePie();
+  if (ANIM.on && intro) pieIntro = { t0: performance.now() };
+  renderPie();
+  startClock(); // Uhrzeit-Anzeige starten
+  FX.kick();
+}
+
+$('startBtn').onclick = () => {
+  const rows = activeRows();
+  state.players = rows.map((row, i) => {
+    const inp = row.querySelector('.name-input');
+    const name = inp.value.trim() || `P${i + 1}`;
+    if (/^die rote$/i.test(name)) setRowColor(row, '#ff0000', false);
+    const color = row.dataset.color || COLORS[i % COLORS.length];
+    localStorage.setItem(`flip7_player_${i}`, inp.value.trim());
+    localStorage.setItem(`flip7_color_${i}`, color);
+    localStorage.setItem(`flip7_color_name_${normalizeName(name)}`, color); // Farbe per Name merken
+    return { name, score: 0, color };
+  });
+  // Also save the player count
+  localStorage.setItem('flip7_player_count', state.players.length);
+  const cb = $('schnellrunde');
+  const zielVal = parseInt($('zielpunkte').value, 10);
+  state.schnell = cb.checked;
+  state.ziel = (cb.checked && !isNaN(zielVal) && zielVal > 0) ? zielVal : 200;
+  state.history = [];
+  confettiFired.clear();
+  activeIdx = null;
+  showGame(true);
+  saveLiveGame();
+};
+
+// ── Zurück zum Setup ───────────────────────────────────────
+// Kein Logo-Tap mehr (versehentliches Verlassen!) – nur noch
+// bewusst über den "Neues Spiel"-Button im Reset-Modal.
+function gotoSetup() {
+  clearLiveGame();
+  FX.clearSparks();
+  $('game').style.display = 'none';
+  $('setup').style.display = 'flex';
+  document.body.dataset.screen = 'setup';
+  retrigger($('setupInner'), 'enter');
+  activeIdx = null;
+  stopClock(); // Uhrzeit-Interval stoppen
+  // hide input bar elements
+  hint.style.display = 'block';
+  deltaInput.style.display = 'none';
+  addBtn.style.display = 'none';
+  subBtn.style.display = 'none';
+  chipName.textContent = '—';
+  chipScore.textContent = '—';
+  chipScore.style.color = 'var(--muted)';
+  chip.style.borderColor = '';
+  chip.style.boxShadow = '';
+  inputBar.classList.remove('has-player');
+  updateAmbientColor();
+}
 
 // ── Uhrzeit im Game-Screen ─────────────────────────────
-// Aktualisiert das #game-clock Element und gibt das Intervall zurück.
 let clockInterval = null;
 function updateClock() {
   const now = new Date();
   const hh  = String(now.getHours()).padStart(2, '0');
   const mm  = String(now.getMinutes()).padStart(2, '0');
-  document.getElementById('game-clock').textContent = `${hh}:${mm}`;
+  $('game-clock').innerHTML = `${hh}<span class="colon">:</span>${mm}`;
 }
 function startClock() {
+  stopClock();
   updateClock();
   clockInterval = setInterval(updateClock, 10_000); // alle 10 s reicht für HH:MM
 }
@@ -741,362 +2453,268 @@ function stopClock() {
   clockInterval = null;
 }
 
-
-function svgEl(tag, attrs={}) {
-  const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
-  for (const [k,v] of Object.entries(attrs)) el.setAttribute(k,v);
-  return el;
-}
-function polar(deg,r) {
-  const rad = (deg-90)*Math.PI/180;
-  return { x: CX+r*Math.cos(rad), y: CY+r*Math.sin(rad) };
-}
-function arc(s, e, rOuter, rInner) {
-  // Gap in pixels (not degrees) so spacing looks equal at all radii
-  const GAP_PX = 2.5;
-  const gOuter = (GAP_PX / rOuter) * (180 / Math.PI);
-  const gInner = (GAP_PX / rInner) * (180 / Math.PI);
-  const a1=s+gOuter/2, b1=e-gOuter/2; // outer arc angles
-  const a2=s+gInner/2, b2=e-gInner/2; // inner arc angles
-  const lg = b1-a1 > 180 ? 1 : 0;
-  const o1=polar(a1,rOuter),o2=polar(b1,rOuter);
-  const i1=polar(b2,rInner),i2=polar(a2,rInner);
-  return `M${o1.x} ${o1.y} A${rOuter} ${rOuter} 0 ${lg} 1 ${o2.x} ${o2.y} L${i1.x} ${i1.y} A${rInner} ${rInner} 0 ${lg} 0 ${i2.x} ${i2.y}Z`;
-}
-const MAX_SCORE = () => state.ziel || 200;
-
-// ── Render Pie ─────────────────────────────────────────
-const svg = document.getElementById('pie-svg');
-
-function renderPie() {
-  svg.innerHTML = '';
-  const n = state.players.length;
-  const deg = 360/n;
-  const maxScore = Math.max(...state.players.map(p=>p.score));
-  const hasWinner = maxScore > 0;
-
-  const defs = svgEl('defs');
-  const f = svgEl('filter',{id:'glow',x:'-25%',y:'-25%',width:'150%',height:'150%'});
-  const blur = svgEl('feGaussianBlur',{in:'SourceGraphic',stdDeviation:'5',result:'b'});
-  const merge = svgEl('feMerge');
-  merge.appendChild(svgEl('feMergeNode',{in:'b'}));
-  merge.appendChild(svgEl('feMergeNode',{in:'SourceGraphic'}));
-  f.appendChild(blur); f.appendChild(merge); defs.appendChild(f);
-  svg.appendChild(defs);
-
-  state.players.forEach((p,i) => {
-    const s=i*deg, e=s+deg, mid=s+deg/2;
-    const isWinner = hasWinner && p.score===maxScore;
-    const isActive = i===activeIdx;
-
-    const g = svgEl('g',{class:'pie-slice'});
-    if (isWinner) g.setAttribute('filter','url(#glow)');
-
-    // Background track (empty part)
-    const trackPath = svgEl('path',{
-      d: arc(s,e,R_OUT,R_IN),
-      fill: p.color,
-      opacity: '0.15'
-    });
-    g.appendChild(trackPath);
-
-    // Filled portion: grows from R_IN outward based on score/MAX_SCORE
-    const fillRatio = Math.min(Math.max(p.score, 0) / MAX_SCORE(), 1);
-    const R_FILL = R_IN + (R_OUT - R_IN) * fillRatio;
-    if (fillRatio > 0) {
-      const fillPath = svgEl('path',{
-        d: arc(s,e,R_FILL,R_IN),
-        fill: p.color,
-        opacity: isActive?'1': isWinner?'0.95':'0.82'
-      });
-      if (isActive) {
-        fillPath.setAttribute('stroke','rgba(255,255,255,0.5)');
-        fillPath.setAttribute('stroke-width','2');
-      }
-      g.appendChild(fillPath);
-    }
-
-    const textR = R_IN+(R_OUT-R_IN)*0.5;
-    const tp = polar(mid, textR);
-    let rot = mid;
-    const norm = ((mid%360)+360)%360;
-    if (norm>90 && norm<270) rot+=180;
-
-    const tg = svgEl('g',{transform:`translate(${tp.x},${tp.y}) rotate(${rot})`});
-    const sf = n<=3?30 : n<=4?26 : n<=5?22 : n<=6?19 : n<=8?15 : n<=10?12 : n<=13?10 : 8;
-    const nf = n<=3?18 : n<=4?16 : n<=5?14 : n<=6?12 : n<=8?10 : n<=10?8 : n<=13?7 : 6;
-    const gap = sf*0.68;
-
-    const st = svgEl('text',{x:0,y:0,'text-anchor':'middle','dominant-baseline':'middle',fill:'#fff','font-family':'DM Mono,monospace','font-weight':'500','font-size':sf,transform:`translate(0,${-gap*0.32})`});
-    st.textContent = p.score;
-    const nt = svgEl('text',{x:0,y:0,'text-anchor':'middle','dominant-baseline':'middle',fill:'rgba(255,255,255,0.92)','font-family':'Syne,sans-serif','font-weight':'700','font-size':nf,'letter-spacing':'0.8',transform:`translate(0,${gap*0.82})`,stroke:'#0f0e17','stroke-width':'3','paint-order':'stroke'});
-    nt.textContent = p.name.toUpperCase().slice(0,10);
-    tg.appendChild(st); tg.appendChild(nt);
-
-    if (isWinner) {
-      const starSize = n<=3?22 : n<=4?18 : n<=5?15 : n<=8?13 : n<=12?10 : 8;
-      const star = svgEl('text',{x:0,y:0,'text-anchor':'middle','dominant-baseline':'middle',fill:'#f7c948','font-size':starSize,transform:`translate(0,${gap*2.2})`,stroke:'#0f0e17','stroke-width':'4','paint-order':'stroke'});
-      star.textContent = '★';
-      tg.appendChild(star);
-    }
-
-    // 😭 erscheint wenn: dieser Spieler hat 0 Punkte UND alle anderen haben ≥50% des Ziels
-    const half = MAX_SCORE() * 0.5;
-    const othersAllAtHalf = state.players.every((op, oi) => oi === i || op.score >= half);
-    if (p.score === 0 && othersAllAtHalf && state.players.length > 1) {
-      const crySize = n<=3?20 : n<=4?17 : n<=5?14 : n<=8?12 : n<=12?10 : 8;
-      const cry = svgEl('text',{x:0,y:0,'text-anchor':'middle','dominant-baseline':'middle','font-size':crySize,transform:`translate(0,${gap*2.2})`,stroke:'#0f0e17','stroke-width':'3','paint-order':'stroke'});
-      cry.textContent = '😭';
-      tg.appendChild(cry);
-    }
-    g.appendChild(tg);
-
-    g.addEventListener('click', () => selectPlayer(i));
-    g.addEventListener('touchend', e=>{e.preventDefault();selectPlayer(i);});
-    svg.appendChild(g);
-  });
-
-  // ── Start player arrow on outer rim ──
-  {
-    const n = state.players.length;
-    const deg = 360 / n;
-    const arrowDeg = startPlayerIdx * deg + deg / 2 - 90; // point to slice center
-    const arrowRad = arrowDeg * Math.PI / 180;
-    const arrowR = R_OUT + 14; // just outside outer ring
-    const ax = CX + arrowR * Math.cos(arrowRad);
-    const ay = CY + arrowR * Math.sin(arrowRad);
-    const playerColor = state.players[startPlayerIdx]?.color || '#fff';
-
-    // Arrow shape: triangle pointing inward
-    const arrowSize = 10;
-    const inwardRad = (arrowDeg + 180) * Math.PI / 180;
-    // tip of arrow (pointing toward pie)
-    const tipX = ax + Math.cos(arrowRad) * (-arrowSize * 0.5);
-    const tipY = ay + Math.sin(arrowRad) * (-arrowSize * 0.5);
-    // two base points perpendicular
-    const perpRad = arrowRad + Math.PI / 2;
-    const b1x = ax + Math.cos(arrowRad) * arrowSize + Math.cos(perpRad) * arrowSize * 0.6;
-    const b1y = ay + Math.sin(arrowRad) * arrowSize + Math.sin(perpRad) * arrowSize * 0.6;
-    const b2x = ax + Math.cos(arrowRad) * arrowSize - Math.cos(perpRad) * arrowSize * 0.6;
-    const b2y = ay + Math.sin(arrowRad) * arrowSize - Math.sin(perpRad) * arrowSize * 0.6;
-
-    const arrow = svgEl('polygon', {
-      points: `${tipX},${tipY} ${b1x},${b1y} ${b2x},${b2y}`,
-      fill: playerColor,
-      stroke: '#0f0e17',
-      'stroke-width': '2',
-      'stroke-linejoin': 'round'
-    });
-    svg.appendChild(arrow);
-  }
-
-  svg.appendChild(svgEl('circle',{cx:CX,cy:CY,r:R_IN-5,fill:'#0f0e17',stroke:'#2a2940','stroke-width':'1.5'}));
-  const cl1=svgEl('text',{x:CX,y:CY-8,'text-anchor':'middle','dominant-baseline':'middle',fill:'#fffffe','font-family':'Syne,sans-serif','font-weight':'800','font-size':'17','letter-spacing':'-1'});
-  cl1.textContent='FLIP';
-  const cl2=svgEl('text',{x:CX,y:CY+12,'text-anchor':'middle','dominant-baseline':'middle',fill:'#ff6b35','font-family':'Syne,sans-serif','font-weight':'800','font-size':'17','letter-spacing':'-1'});
-  cl2.textContent='7';
-  svg.appendChild(cl1); svg.appendChild(cl2);
-
-  // Invisible tap target over center to advance start player
-  const centerTap = svgEl('circle',{cx:CX,cy:CY,r:R_IN-5,fill:'transparent',cursor:'pointer'});
-  centerTap.addEventListener('click', () => {
-    startPlayerIdx = (startPlayerIdx + 1) % state.players.length;
-    renderPie();
-    const name = state.players[startPlayerIdx].name;
-    showToast(`Startspieler: ${name}`);
-  });
-  centerTap.addEventListener('touchend', e => { e.preventDefault(); e.stopPropagation();
-    startPlayerIdx = (startPlayerIdx + 1) % state.players.length;
-    renderPie();
-    showToast(`Startspieler: ${state.players[startPlayerIdx].name}`);
-  });
-  svg.appendChild(centerTap);
-}
-
 // ── Player selection ───────────────────────────────────
-const chipName  = document.getElementById('chip-name');
-const chipScore = document.getElementById('chip-score');
-const chip      = document.getElementById('active-chip');
-const hint      = document.getElementById('no-player-hint');
-const deltaInput= document.getElementById('delta-input');
-const addBtn    = document.getElementById('add-btn');
-const subBtn    = document.getElementById('sub-btn');
-let subBtnTimer = null;
-
-function selectPlayer(idx) {
+function selectPlayer(idx, focus = true) {
+  const changed = activeIdx !== idx;
   activeIdx = idx;
   const p = state.players[idx];
-  chipName.textContent  = p.name.toUpperCase().slice(0,8);
-  chipScore.textContent = p.score;
+  chipName.textContent  = p.name.toUpperCase().slice(0, 8);
+  chipScore.textContent = Math.round(ANIM.on && pieAnim[idx] ? pieAnim[idx].num : p.score);
   chipScore.style.color = p.color;
-  chip.style.borderColor  = p.color;
-  addBtn.style.background = p.color;
+  chip.style.borderColor = p.color;
+  chip.style.boxShadow = `0 0 16px -5px ${p.color}`;
+  inputBar.style.setProperty('--pc', p.color);
+  inputBar.style.setProperty('--pc-a', rgba(p.color, 0.28));
+  inputBar.classList.add('has-player');
   deltaInput.style.borderColor = p.color;
-  hint.style.display        = 'none';
-  deltaInput.style.display  = 'block';
-  addBtn.style.display      = 'block';
-  document.getElementById('sub-btn').style.display = 'block';
-  subBtn.style.display      = 'block';
-  subBtn.style.borderColor  = p.color;
-  subBtn.classList.remove('confirm');
-  clearTimeout(subBtnTimer);
+  hint.style.display       = 'none';
+  deltaInput.style.display = 'block';
+  addBtn.style.display     = 'block';
+  subBtn.style.display     = 'block';
+  subBtn.style.borderColor = p.color;
+  resetSubBtn();
   deltaInput.value = '';
-  deltaInput.focus();
+  if (focus) deltaInput.focus();
+  if (changed) retrigger(chip, 'flip');
   renderPie();
+  FX.kick();
+  saveLiveGame();
 }
 
-addBtn.addEventListener('click', () => commitScore());
-deltaInput.addEventListener('keydown', e => { if (e.key==='Enter') commitScore(); });
+addBtn.addEventListener('click', () => commitScore(false, addBtn));
+deltaInput.addEventListener('keydown', e => { if (e.key === 'Enter') commitScore(false, deltaInput); });
+// Tastatur bleibt offen, wenn ADD/SUB getippt wird (kein Fokus-Wechsel)
+[addBtn, subBtn].forEach(b => b.addEventListener('mousedown', e => { if (document.activeElement === deltaInput) e.preventDefault(); }));
 
-// Sub-btn: double-tap to confirm
+// Sub-btn: double-tap to confirm (mit ablaufendem Countdown-Balken)
 let subTapTimer = null;
+function resetSubBtn() {
+  clearTimeout(subTapTimer);
+  subTapTimer = null;
+  subBtn.classList.remove('confirm');
+  subBtn.textContent = '− SUB';
+}
 subBtn.addEventListener('click', () => {
   if (subTapTimer) {
     // Second tap: commit subtraction
-    clearTimeout(subTapTimer);
-    subTapTimer = null;
-    subBtn.classList.remove('confirm');
-    subBtn.textContent = '− SUB';
-    commitScore(true); // true = subtract
+    resetSubBtn();
+    commitScore(true, subBtn); // true = subtract
   } else {
     // First tap: ask for confirmation
     subBtn.classList.add('confirm');
     subBtn.textContent = '✓ Sicher?';
-    subTapTimer = setTimeout(() => {
-      subTapTimer = null;
-      subBtn.classList.remove('confirm');
-      subBtn.textContent = '− SUB';
-    }, 2000);
+    subTapTimer = setTimeout(resetSubBtn, 2000);
   }
 });
 
-// Sub button: needs double-tap to confirm
-
-
-// Back to setup: siehe oben bei "── Back to setup ──"
-
-function commitScore(subtract=false) {
-  if (activeIdx===null) return;
+function commitScore(subtract = false, srcEl = null) {
+  if (activeIdx === null) return;
   const raw = parseInt(deltaInput.value, 10);
-  if (isNaN(raw)) { showToast('Bitte eine Zahl eingeben'); return; }
+  if (isNaN(raw)) { showToast('Bitte eine Zahl eingeben'); retrigger(deltaInput, 'shake'); return; }
   const val = subtract ? -Math.abs(raw) : raw;
-  const p = state.players[activeIdx];
+  const i = activeIdx;
+  const p = state.players[i];
   const prev = p.score;
-  state.history.push({ playerIdx: activeIdx, delta: val, before: prev });
+  state.history.push({ playerIdx: i, delta: val, before: prev });
   p.score += val;
-  chipScore.textContent = p.score;
   deltaInput.value = '';
+
+  const crossed = p.score >= CONFETTI_AT() && prev < CONFETTI_AT() && !confettiFired.has(i);
+  if (crossed) confettiFired.add(i);
+  const celebrate = () => {
+    launchConfetti(p.color);
+    if (ANIM.on) {
+      const q = sparkTarget(i, 0.5);
+      fxRing(q.x, q.y, p.color, 170, 0.9, 6, 0.85);
+      fxRing(q.x, q.y, '#ffffff', 110, 0.65, 2, 0.6);
+      fxEmbers(q.x, q.y, p.color, 26, 380, { dur: 0.8, drag: 0.94 });
+    }
+  };
+
+  if (ANIM.on) {
+    const src = elCenter(srcEl || deltaInput);
+    if (val > 0) {
+      const b = launchSparks(i, val, src);
+      if (crossed) b.onDone = celebrate;   // Konfetti, sobald die Funken eingeschlagen sind
+    } else if (val < 0) drainFx(i, val);
+    else bustFx(i, src);
+  } else if (crossed) celebrate();
+
   renderPie();
   deltaInput.focus();
-  showToast(`${p.name}: ${val>=0?'+':''}${val} → ${p.score}`);
-  if (p.score>=CONFETTI_AT() && prev<CONFETTI_AT() && !confettiFired.has(activeIdx)) {
-    confettiFired.add(activeIdx);
-    launchConfetti(p.color);
-  }
+  showToast(`${p.name}: ${val >= 0 ? '+' : ''}${val} → ${p.score}`, p.color);
+  saveLiveGame();
+  FX.kick();
 }
 
-// ── Siegerehrung ────────────────────────────────────────
-document.getElementById('siegerBtn').onclick = openSiegerehrung;
-document.getElementById('siegerClose').onclick = () => {
-  overlay.classList.remove('active');
-  document.getElementById('sieger-modal').classList.remove('open');
-};
-
 // ── History ────────────────────────────────────────────
-const overlay = document.getElementById('overlay');
-document.getElementById('historyBtn').onclick = () => {
+$('historyBtn').onclick = () => {
   renderHistory();
-  document.getElementById('history-panel').classList.add('open');
+  $('history-panel').classList.add('open');
   overlay.classList.add('active');
 };
-overlay.onclick = () => {
-  document.getElementById('history-panel').classList.remove('open');
-  document.getElementById('reset-modal').classList.remove('open');
-  document.getElementById('sieger-modal').classList.remove('open');
-  overlay.classList.remove('active');
-};
+overlay.onclick = closeAllModals;
 
 function renderHistory() {
-  const list = document.getElementById('historyList');
-  const undo = document.getElementById('undoBtn');
-  if (!state.history.length) { list.innerHTML='<div class="empty-history">Noch keine Einträge</div>'; undo.disabled=true; return; }
+  const list = $('historyList');
+  const undo = $('undoBtn');
+  if (!state.history.length) { list.innerHTML = '<div class="empty-history">Noch keine Einträge</div>'; undo.disabled = true; return; }
   undo.disabled = false;
-  list.innerHTML = [...state.history].reverse().map((e,ri) => {
-    const p=state.players[e.playerIdx], rnd=state.history.length-ri;
-    return `<div class="history-item">
+  list.innerHTML = [...state.history].reverse().map((e, ri) => {
+    const p = state.players[e.playerIdx], rnd = state.history.length - ri;
+    return `<div class="history-item${ri === 0 ? ' latest' : ''}" style="--c:${p.color};--ca:${rgba(p.color, 0.16)};--i:${Math.min(ri, 12)}">
       <div><div class="hist-player" style="color:${p.color}">${esc(p.name)}</div><div class="hist-round">Runde ${rnd} · vorher: ${e.before}</div></div>
-      <div class="hist-delta ${e.delta<0?'neg':''}">${e.delta>=0?'+':''}${e.delta} → ${e.before+e.delta}</div>
+      <div class="hist-delta ${e.delta < 0 ? 'neg' : ''}">${e.delta >= 0 ? '+' : ''}${e.delta} → ${e.before + e.delta}</div>
     </div>`;
   }).join('');
 }
 
-document.getElementById('undoBtn').onclick = () => {
+$('undoBtn').onclick = () => {
   if (!state.history.length) return;
   const last = state.history.pop();
-  state.players[last.playerIdx].score = last.before;
-  if (state.players[last.playerIdx].score<CONFETTI_AT()) confettiFired.delete(last.playerIdx);
-  if (activeIdx!==null) chipScore.textContent = state.players[activeIdx].score;
+  const i = last.playerIdx;
+  FX.cancelSparks(i);
+  inflight[i] = 0;
+  state.players[i].score = last.before;
+  if (state.players[i].score < CONFETTI_AT()) confettiFired.delete(i);
+  if (pieAnim[i]) { pieAnim[i].wave = Math.min(pieAnim[i].wave + 3, 7); pieAnim[i].flash = last.delta > 0 ? 0.6 : 0; }
   renderPie(); renderHistory();
   showToast('Letzte Eingabe rückgängig');
+  saveLiveGame();
+  FX.kick();
 };
 
 // ── Reset ──────────────────────────────────────────────
-document.getElementById('resetBtn').onclick = () => { overlay.classList.add('active'); document.getElementById('reset-modal').classList.add('open'); };
-document.getElementById('cancelReset').onclick = () => { overlay.classList.remove('active'); document.getElementById('reset-modal').classList.remove('open'); };
-document.getElementById('confirmReset').onclick = () => {
-  state.players.forEach(p=>p.score=0); state.history=[]; confettiFired.clear(); startPlayerIdx=0;
-  if (activeIdx!==null) chipScore.textContent='0';
-  overlay.classList.remove('active'); document.getElementById('reset-modal').classList.remove('open');
+$('resetBtn').onclick = () => openModal('reset-modal');
+$('cancelReset').onclick = () => { closeModal('reset-modal'); overlay.classList.remove('active'); };
+$('confirmReset').onclick = () => {
+  FX.cancelSparks();
+  inflight = inflight.map(() => 0);
+  state.players.forEach(p => p.score = 0); state.history = []; confettiFired.clear(); startPlayerIdx = 0;
+  closeModal('reset-modal'); overlay.classList.remove('active');
+  pieAnim.forEach(a => { a.wave = 4; a.flash = 0.5; });
   renderPie(); showToast('Punkte zurückgesetzt');
+  saveLiveGame();
+  FX.kick();
+};
+$('newGameBtn').onclick = () => {
+  closeModal('reset-modal'); overlay.classList.remove('active');
+  gotoSetup();
 };
 
-// ── Toast ──────────────────────────────────────────────
-let toastTimer;
-function showToast(msg) {
-  const t=document.getElementById('toast');
-  t.textContent=msg; t.classList.add('show');
-  clearTimeout(toastTimer);
-  toastTimer=setTimeout(()=>t.classList.remove('show'),2000);
+// ── Spieler:in hinzufügen ──────────────────────────────
+let addpColor = COLORS[0];
+function setAddpColor(c, animate) {
+  addpColor = c;
+  const sw = $('addpSwatch');
+  sw.style.background = c;
+  sw.style.setProperty('--sw', c);
+  $('addpHex').textContent = c.toUpperCase();
+  if (animate) retrigger(sw, 'pop');
 }
-function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+$('addPlayerBtn').onclick = () => {
+  setAddpColor(COLORS[state.players.length % COLORS.length]);
+  $('addp-name').value = '';
+  openModal('add-player-modal');
+  setTimeout(() => $('addp-name').focus(), 120);
+};
+// Beim Tippen: gemerkte Farbe für diesen Namen automatisch übernehmen
+$('addp-name').addEventListener('input', e => {
+  const nk = normalizeName(e.target.value.trim());
+  if (!nk) return;
+  const remembered = localStorage.getItem(`flip7_color_name_${nk}`);
+  if (remembered && remembered !== addpColor) setAddpColor(remembered, true);
+});
+$('addpColorRow').onclick = () => {
+  CP.open(addpColor, state.players.map(p => p.color)).then(c => { if (c) setAddpColor(c, true); });
+};
+$('cancelAddPlayer').onclick = () => { closeModal('add-player-modal'); overlay.classList.remove('active'); };
+$('confirmAddPlayer').onclick = () => {
+  const name = $('addp-name').value.trim() || `P${state.players.length + 1}`;
+  const color = addpColor;
+  localStorage.setItem(`flip7_color_name_${normalizeName(name)}`, color); // Farbe per Name merken
+  const now = performance.now();
+  const from = state.players.map((_, k) => sliceAngles(k, now));
+  state.players.push({ name, score: 0, color });
+  ensurePieAnim();
+  if (ANIM.on) { from.push({ s: 360, e: 360 }); layoutAnim = { from, t0: now, dur: 560 }; arrowShown = null; }
+  closeModal('add-player-modal'); overlay.classList.remove('active');
+  sizePie();
+  renderPie();
+  showToast(`${name} hinzugefügt`, color);
+  saveLiveGame();
+  FX.kick();
+};
 
-// ── Confetti ───────────────────────────────────────────
-const confCanvas=document.getElementById('confetti-canvas');
-const confCtx=confCanvas.getContext('2d');
-let particles=[],rafId=null;
+// ── Siegerehrung ────────────────────────────────────────
+// Öffnet das Siegerehrung-Modal: vergibt Medaillen an Top-3 und zeigt Podium
+function openSiegerehrung() {
+  if (!state.players.length) return;
+  // Spieler nach Score sortieren (absteigend), Original-Index merken
+  const ranked = state.players
+    .map((p, i) => ({ ...p, origIdx: i }))
+    .sort((a, b) => b.score - a.score);
 
-function launchConfetti(base) {
-  // 3 Wellen dicht nacheinander (0 ms / 600 ms / 1200 ms Verzögerung)
-  // → insgesamt 600 Partikel, füllt den Bildschirm deutlich länger
-  [0, 300, 600].forEach(delay => {
-    setTimeout(() => {
-      confCanvas.width=window.innerWidth; confCanvas.height=window.innerHeight;
-      const pal=[base,'#f7c948','#fffffe','#4ecdc4','#ff6b35','#a78bfa','#fb7185'];
-      for(let i=0;i<200;i++) particles.push({
-        x:Math.random()*confCanvas.width, y:-10-Math.random()*100,
-        w:6+Math.random()*9, h:3+Math.random()*5,
-        color:pal[Math.floor(Math.random()*pal.length)],
-        vx:(Math.random()-.5)*5, vy:1.5+Math.random()*4,
-        angle:Math.random()*Math.PI*2, spin:(Math.random()-.5)*0.18,
-        grav:0.07+Math.random()*0.05, life:1
-      });
-      if(!rafId) tick();
-    }, delay);
+  const medals = ['gold', 'silver', 'bronze'];
+  const awarded = [];
+  // Bei Gleichstand gleiche Medaille, aber max. 3 verschiedene Ränge
+  let lastScore = null, rank = -1;
+  ranked.forEach(p => {
+    if (p.score !== lastScore) { rank++; lastScore = p.score; }
+    if (rank < 3) {
+      addMedal(p.name, medals[rank]);
+      awarded.push({ ...p, medal: medals[rank], rank });
+    }
   });
+
+  // Session für Langzeitstatistik speichern
+  saveSession(ranked, awarded);
+
+  // Podium rendern: Silber links, Gold Mitte, Bronze rechts – steigt nacheinander auf
+  const wrap = $('podium-wrap');
+  wrap.innerHTML = '';
+  const medalEmoji = { gold: '🥇', silver: '🥈', bronze: '🥉' };
+  const medalLabel = { gold: '1.', silver: '2.', bronze: '3.' };
+  const delay = { bronze: 0.1, silver: 0.3, gold: 0.55 };
+
+  ['silver', 'gold', 'bronze'].forEach(type => {
+    const p = awarded.find(a => a.medal === type);
+    if (!p) return;
+    const slot = document.createElement('div');
+    slot.className = `podium-slot slot-${type}`;
+    slot.style.setProperty('--d', delay[type] + 's');
+    slot.innerHTML = `
+      ${type === 'gold' ? '<div class="podium-rays"></div>' : ''}
+      <div class="podium-name" style="color:${p.color}">${esc(p.name)}</div>
+      <div class="podium-score">${p.score} Pkt</div>
+      <div class="podium-medal">${medalEmoji[type]}</div>
+      <div class="podium-block ${type}">${medalLabel[type]}</div>`;
+    wrap.appendChild(slot);
+    countUp(slot.querySelector('.podium-score'), p.score, 900, (delay[type] + 0.4) * 1000, ' Pkt');
+  });
+
+  openModal('sieger-modal');
+  // Konfetti in der Siegerfarbe
+  const winner = awarded.find(a => a.medal === 'gold');
+  if (winner) launchConfetti(winner.color, ANIM.on ? 'cannons' : 'rain');
+
+  // Setup-Badges aktualisieren (damit beim nächsten Öffnen die neuen Medaillen sichtbar sind)
+  renderNameInputs();
 }
-function tick() {
-  confCtx.clearRect(0,0,confCanvas.width,confCanvas.height);
-  particles=particles.filter(p=>p.life>0.02);
-  particles.forEach(p=>{
-    p.vy+=p.grav; p.x+=p.vx; p.y+=p.vy; p.angle+=p.spin;
-    if(p.y>confCanvas.height*0.88) p.life-=0.03;
-    confCtx.save(); confCtx.globalAlpha=p.life;
-    confCtx.translate(p.x,p.y); confCtx.rotate(p.angle);
-    confCtx.fillStyle=p.color; confCtx.fillRect(-p.w/2,-p.h/2,p.w,p.h);
-    confCtx.restore();
-  });
-  if(particles.length){rafId=requestAnimationFrame(tick);}
-  else{confCtx.clearRect(0,0,confCanvas.width,confCanvas.height);rafId=null;}
+$('siegerBtn').onclick = openSiegerehrung;
+$('siegerClose').onclick = () => { closeModal('sieger-modal'); overlay.classList.remove('active'); };
+
+// Zahl hochzählen lassen (für Podium & Kennzahlen)
+function countUp(el, to, dur = 900, delay = 0, suffix = '') {
+  if (!ANIM.on || typeof to !== 'number') { el.textContent = to + suffix; return; }
+  const t0 = performance.now() + delay;
+  el.textContent = '0' + suffix;
+  const step = now => {
+    const k = clamp((now - t0) / dur, 0, 1);
+    el.textContent = Math.round(to * easeOutCubic(k)) + suffix;
+    if (k < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
 }
 
 // ── Wake Lock (Display bleibt an) ─────────────────────
@@ -1105,7 +2723,7 @@ async function requestWakeLock() {
   if ('wakeLock' in navigator) {
     try {
       wakeLock = await navigator.wakeLock.request('screen');
-    } catch(e) { /* silent fail */ }
+    } catch (e) { /* silent fail */ }
   }
 }
 document.addEventListener('visibilitychange', () => {
@@ -1113,13 +2731,426 @@ document.addEventListener('visibilitychange', () => {
 });
 requestWakeLock();
 </script>
+
+<script>
+// ══════════════════════════════════════════════════════
+// LANGZEIT-STATISTIK
+// Sessions werden in localStorage als Array gespeichert:
+// flip7_sessions → [{date:"2025-01-15", players:[{name,score,color,medal}]}]
+// ══════════════════════════════════════════════════════
+function loadSessions() {
+  try { return JSON.parse(localStorage.getItem('flip7_sessions')) || []; }
+  catch { return []; }
+}
+function saveSessions(arr) {
+  localStorage.setItem('flip7_sessions', JSON.stringify(arr));
+}
+
+// Wird von openSiegerehrung() aufgerufen
+function saveSession(ranked, awarded) {
+  const sessions = loadSessions();
+  const entry = {
+    date: localYMD(), // "YYYY-MM-DD" (lokales Datum)
+    players: ranked.map(p => ({
+      name:  p.name,
+      score: p.score,
+      color: p.color,
+      medal: awarded.find(a => a.name === p.name && a.origIdx === p.origIdx)?.medal || null
+    }))
+  };
+  sessions.push(entry);
+  saveSessions(sessions);
+}
+
+// Filtert Sessions nach Zeitraum (days=0 → alles)
+function filterSessions(days) {
+  const all = loadSessions();
+  if (!days) return all;
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - days);
+  const cutStr = localYMD(cutoff);
+  return all.filter(s => s.date >= cutStr);
+}
+
+// Sammelt alle bekannten Spieler (Name→Farbe) aus allen Sessions
+function getPlayersFromSessions(sessions) {
+  const map = {}; // name → {color, totalScore, count, gold, silver, bronze}
+  sessions.forEach(s => {
+    s.players.forEach(p => {
+      const nk = normalizeName(p.name);
+      if (!map[nk]) map[nk] = {name:p.name, color:p.color, totalScore:0, count:0, gold:0, silver:0, bronze:0};
+      map[nk].color = p.color; // immer aktuellste Farbe
+      map[nk].totalScore += p.score;
+      map[nk].count++;
+      if (p.medal) map[nk][p.medal]++;
+    });
+  });
+  return Object.values(map);
+}
+
+// ── Stats-Screen öffnen / schließen ──────────────────
+let statsFilterDays = 7;
+let hiddenLines = new Set(); // für Linien-Chart Toggle
+let statsCache = null;
+
+function openStats() {
+  const s = $('stats-screen');
+  clearTimeout(s._t);
+  s.classList.remove('closing');
+  s.classList.add('open');
+  s.scrollTop = 0;
+  syncSeg();
+  renderStats(true);
+}
+function closeStats() {
+  const s = $('stats-screen');
+  clearTimeout(s._t);
+  if (!ANIM.on) { s.classList.remove('open'); return; }
+  s.classList.add('closing');
+  s._t = setTimeout(() => s.classList.remove('open', 'closing'), 260);
+}
+$('statsBtn').onclick = openStats;
+$('statsBackBtn').onclick = closeStats;
+
+// Zeitraum-Umschalter (Indikator gleitet zur Auswahl)
+function syncSeg() {
+  const chips = [...document.querySelectorAll('.fchip')];
+  const k = Math.max(0, chips.findIndex(c => parseInt(c.dataset.days, 10) === statsFilterDays));
+  chips.forEach((c, j) => c.classList.toggle('active', j === k));
+  $('filterChips').style.setProperty('--k', k);
+}
+$('filterChips').addEventListener('click', e => {
+  const chip = e.target.closest('.fchip');
+  if (!chip) return;
+  statsFilterDays = parseInt(chip.dataset.days, 10);
+  syncSeg();
+  renderStats(true);
+});
+// Legende: Linien ein-/ausblenden (nur Diagramm neu, ohne Animation)
+$('sc-legend').addEventListener('click', e => {
+  const chip = e.target.closest('.legend-chip');
+  if (!chip || !statsCache) return;
+  const nk = chip.dataset.nk;
+  hiddenLines.has(nk) ? hiddenLines.delete(nk) : hiddenLines.add(nk);
+  renderLineChart(statsCache.sessions, statsCache.players, false);
+});
+
+function renderStats(animate = true) {
+  const sessions = filterSessions(statsFilterDays);
+  const players  = getPlayersFromSessions(sessions);
+  statsCache = { sessions, players };
+  const A = animate && ANIM.on;
+  renderKpis(sessions, players, A);
+  renderStatsPodium(players, A);
+  renderLineChart(sessions, players, A);
+  renderMedalBars(players, A);
+  renderAvgBars(players, A);
+  renderHeatmap(loadSessions(), A); // Heatmap immer über alle Sessions
+}
+
+const cw = el => Math.max(220, Math.floor(el.clientWidth || 300));
+const shortName = (n, max = 9) => { const u = n.toUpperCase(); return u.length > max ? u.slice(0, max - 1) + '…' : u; };
+const animAttr = (A, cls, d) => A ? ` class="${cls}" style="--d:${d.toFixed(3)}s"` : '';
+
+// ── Kennzahlen ────────────────────────────────────────
+function renderKpis(sessions, players, A) {
+  const el = $('sc-kpis');
+  let best = null;
+  sessions.forEach(s => s.players.forEach(p => { if (!best || p.score > best.score) best = p; }));
+  const items = [
+    { v: sessions.length, l: sessions.length === 1 ? 'Spiel' : 'Spiele' },
+    { v: players.length, l: 'Spieler:innen' },
+    { v: best ? best.score : '–', l: best ? `Rekord · ${best.name}` : 'Rekord', c: best ? best.color : null }
+  ];
+  el.classList.toggle('static', !A);
+  el.innerHTML = items.map((it, k) =>
+    `<div class="kpi" style="--i:${k}"><div class="kpi-val"${it.c ? ` style="color:${it.c}"` : ''}>${it.v}</div><div class="kpi-lbl">${esc(it.l)}</div></div>`).join('');
+  if (A) el.querySelectorAll('.kpi-val').forEach((v, k) => countUp(v, items[k].v, 800, 200 + k * 90));
+}
+
+// ── Karte 1: Podium (Top-3 nach Goldmedaillen) ───────
+function renderStatsPodium(players, A) {
+  const el = $('sc-podium');
+  if (!players.length) { el.innerHTML = '<div class="empty-stats">Noch keine Spiele gespeichert</div>'; return; }
+  const sorted = [...players].sort((a, b) => b.gold - a.gold || b.silver - a.silver || b.bronze - a.bronze);
+  const top3 = sorted.slice(0, 3);
+  // Reihenfolge: Silber-Gold-Bronze (Silber links, Gold Mitte, Bronze rechts)
+  const cfg = [
+    { type: 'silver', emoji: '🥈', cls: 'ss', lbl: '2.', d: 0.3 },
+    { type: 'gold',   emoji: '🥇', cls: 'sg', lbl: '1.', d: 0.5 },
+    { type: 'bronze', emoji: '🥉', cls: 'sb', lbl: '3.', d: 0.12 }
+  ];
+  const medTxt = p => [p.gold && `${p.gold}🥇`, p.silver && `${p.silver}🥈`, p.bronze && `${p.bronze}🥉`].filter(Boolean).join(' ') || '–';
+  const slots = [top3[1], top3[0], top3[2]].map((p, si) => {
+    if (!p) return '';
+    const m = cfg[si];
+    return `<div class="sp-slot ${m.cls}" style="--d:${m.d}s">
+      <div class="sp-name" style="color:${p.color}">${esc(p.name)}</div>
+      <div class="sp-val">${medTxt(p)}</div>
+      <div class="sp-emoji">${m.emoji}</div>
+      <div class="sp-block ${m.type}">${m.lbl}</div>
+    </div>`;
+  }).join('');
+  el.innerHTML = `<div class="stats-podium${A ? ' anim' : ''}">${slots}</div>`;
+}
+
+// ── Karte 2: Kumuliertes Liniendiagramm ──────────────
+function renderLineChart(sessions, players, A) {
+  const el    = $('sc-linechart');
+  const legEl = $('sc-legend');
+  if (!sessions.length || !players.length) {
+    el.innerHTML = '<div class="empty-stats">Keine Daten im Zeitraum</div>';
+    legEl.innerHTML = '';
+    return;
+  }
+  const W = cw(el);
+  const H = 180;
+
+  // Datenpunkte aufbauen: für jeden Spieler kumulierte Punkte je Session
+  const sorted = [...sessions].sort((a, b) => a.date.localeCompare(b.date));
+  const cumul = {}, points = {};
+  players.forEach(p => { const nk = normalizeName(p.name); cumul[nk] = 0; points[nk] = []; });
+  sorted.forEach((s, si) => {
+    s.players.forEach(p => {
+      const nk = normalizeName(p.name);
+      if (cumul[nk] === undefined) { cumul[nk] = 0; points[nk] = []; }
+      cumul[nk] += p.score;
+      points[nk].push({ si, y: cumul[nk] });
+    });
+  });
+  const vals = Object.values(cumul);
+  const maxVal = Math.max(...vals, 1);
+  const minVal = Math.min(0, ...vals);
+  const endW = String(Math.round(maxVal)).length * 6.2 + 12;   // Platz für die Endwerte rechts
+  const PAD = { top: 12, right: Math.max(20, endW), bottom: 24, left: 36 };
+  const IW = W - PAD.left - PAD.right;
+  const IH = H - PAD.top - PAD.bottom;
+  const X = si => PAD.left + (sorted.length === 1 ? IW / 2 : (si / (sorted.length - 1)) * IW);
+  const Y = v => PAD.top + IH - ((v - minVal) / (maxVal - minVal)) * IH;
+  const fmtV = v => Math.abs(v) >= 10000 ? (v / 1000).toFixed(0) + 'k' : String(v);
+
+  let svg = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`;
+  // Grid-Linien + Y-Achse (4 Labels)
+  [0, 1, 2, 3].forEach(k => {
+    const v = Math.round(lerp(minVal, maxVal, k / 3));
+    const y = Y(v);
+    svg += `<line x1="${PAD.left}" y1="${y.toFixed(1)}" x2="${PAD.left + IW}" y2="${y.toFixed(1)}" stroke="#2a2940" stroke-width="1"${v === 0 && minVal < 0 ? ' stroke-dasharray="3 3"' : ''}/>`;
+    svg += `<text x="${PAD.left - 5}" y="${(y + 3.5).toFixed(1)}" text-anchor="end" font-family="DM Mono,monospace" font-size="9" fill="#7e7d9a">${fmtV(v)}</text>`;
+  });
+  // X-Achse: Datum der ersten und letzten Session (TT.MM.)
+  const fmtDate = d => `${d.slice(8, 10)}.${d.slice(5, 7)}.`;
+  if (sorted.length > 1) {
+    svg += `<text x="${PAD.left}" y="${H - 5}" text-anchor="start" font-family="DM Mono,monospace" font-size="9" fill="#7e7d9a">${fmtDate(sorted[0].date)}</text>`;
+    svg += `<text x="${PAD.left + IW}" y="${H - 5}" text-anchor="end" font-family="DM Mono,monospace" font-size="9" fill="#7e7d9a">${fmtDate(sorted[sorted.length - 1].date)}</text>`;
+  } else {
+    svg += `<text x="${X(0)}" y="${H - 5}" text-anchor="middle" font-family="DM Mono,monospace" font-size="9" fill="#7e7d9a">${fmtDate(sorted[0].date)}</text>`;
+  }
+
+  // Linien + Punkte pro Spieler
+  const ends = [];
+  const showDots = sorted.length <= 30;
+  let li = 0;
+  players.forEach(p => {
+    const nk = normalizeName(p.name);
+    if (hiddenLines.has(nk)) return;
+    const pts = points[nk];
+    if (!pts || !pts.length) return;
+    const d0 = li * 0.09;
+    if (pts.length > 1) {
+      const d = pts.map((pt, j) => `${j ? 'L' : 'M'}${X(pt.si).toFixed(1)} ${Y(pt.y).toFixed(1)}`).join('');
+      svg += `<path d="${d}" pathLength="1" fill="none" stroke="${p.color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"${animAttr(A, 'a-line', d0)}/>`;
+    }
+    pts.forEach((pt, j) => {
+      const isLast = j === pts.length - 1;
+      if (!showDots && !isLast) return;
+      svg += `<circle cx="${X(pt.si).toFixed(1)}" cy="${Y(pt.y).toFixed(1)}" r="${isLast ? 4 : 3.2}" fill="${p.color}" stroke="#1a1928" stroke-width="1.5"${animAttr(A, 'a-pop', d0 + 0.15 + (j / Math.max(1, pts.length - 1)) * 0.75)}/>`;
+    });
+    const last = pts[pts.length - 1];
+    ends.push({ x: X(last.si), y: Y(last.y), v: last.y, color: p.color });
+    li++;
+  });
+  // Endwerte: überlappende Labels auseinanderschieben
+  ends.sort((a, b) => a.y - b.y);
+  for (let k = 1; k < ends.length; k++) if (ends[k].y - ends[k - 1].y < 11) ends[k].y = ends[k - 1].y + 11;
+  const over = ends.length ? ends[ends.length - 1].y - (H - PAD.bottom + 2) : 0;
+  if (over > 0) ends.forEach(e => e.y -= over);
+  ends.forEach(e => {
+    svg += `<text x="${(e.x + 7).toFixed(1)}" y="${(e.y + 3.5).toFixed(1)}" font-family="DM Mono,monospace" font-size="9.5" fill="${e.color}" font-weight="700"${animAttr(A, 'a-fade', 0.9)}>${fmtV(e.v)}</text>`;
+  });
+  svg += '</svg>';
+  el.innerHTML = svg;
+
+  // Legende mit Toggle
+  legEl.innerHTML = players.map(p => {
+    const nk = normalizeName(p.name);
+    const off = hiddenLines.has(nk) ? 'off' : '';
+    return `<div class="legend-chip ${off}" data-nk="${esc(nk)}" style="border-color:${rgba(p.color, 0.35)}">
+      <div class="legend-dot" style="background:${p.color}"></div>
+      <span style="color:${p.color}">${esc(p.name)}</span>
+    </div>`;
+  }).join('');
+}
+
+// Namensspalte für die Balkendiagramme
+const barName = (p, y, ROW_H) =>
+  `<text x="0" y="${(y + ROW_H * 0.7).toFixed(1)}" font-family="Syne,sans-serif" font-weight="700" font-size="10.5" fill="${p.color}">${esc(shortName(p.name))}</text>`;
+
+// ── Karte 3: Medaillen-Balken (gestapelt) ────────────
+function renderMedalBars(players, A) {
+  const el = $('sc-medals');
+  if (!players.length) { el.innerHTML = '<div class="empty-stats">Keine Daten</div>'; return; }
+  const sorted = [...players].sort((a, b) => (b.gold*3 + b.silver*2 + b.bronze) - (a.gold*3 + a.silver*2 + a.bronze));
+  const maxTotal = Math.max(...sorted.map(p => p.gold + p.silver + p.bronze), 1);
+  const W = cw(el);
+  const ROW_H = 20, GAP = 10, LABEL_W = 76, NUM_W = 56;
+  const BAR_W = Math.max(40, W - LABEL_W - NUM_W);
+  const H = sorted.length * (ROW_H + GAP) - GAP;
+
+  let svg = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`;
+  sorted.forEach((p, i) => {
+    const y = i * (ROW_H + GAP);
+    const total = p.gold + p.silver + p.bronze;
+    svg += barName(p, y, ROW_H);
+    if (!total) {
+      svg += `<text x="${LABEL_W}" y="${(y + ROW_H * 0.72).toFixed(1)}" font-family="DM Mono,monospace" font-size="9" fill="#7e7d9a">–</text>`;
+      return;
+    }
+    const wTotal = (total / maxTotal) * BAR_W;
+    svg += `<g${animAttr(A, 'a-grow', i * 0.06)}>`;
+    let bx = LABEL_W;
+    [['gold', '#f7c948'], ['silver', '#b8c0cc'], ['bronze', '#cd7f32']].forEach(([k, col]) => {
+      if (!p[k]) return;
+      const w = (p[k] / total) * wTotal;
+      svg += `<rect x="${bx.toFixed(1)}" y="${y}" width="${Math.max(w - 1.5, 1.5).toFixed(1)}" height="${ROW_H}" rx="4" fill="${col}"/>`;
+      bx += w;
+    });
+    svg += '</g>';
+    // Zahl rechts (Platz dafür ist reserviert → wird nicht mehr abgeschnitten)
+    svg += `<text x="${(LABEL_W + wTotal + 6).toFixed(1)}" y="${(y + ROW_H * 0.72).toFixed(1)}" font-family="DM Mono,monospace" font-size="9.5" fill="#9d9cb8"${animAttr(A, 'a-fade', 0.5 + i * 0.06)}>${p.gold}·${p.silver}·${p.bronze}</text>`;
+  });
+  svg += '</svg>';
+  el.innerHTML = svg;
+}
+
+// ── Karte 4: Durchschnitt horizontale Balken ─────────
+function renderAvgBars(players, A) {
+  const el = $('sc-avg');
+  if (!players.length) { el.innerHTML = '<div class="empty-stats">Keine Daten</div>'; return; }
+  const withAvg = players.map(p => ({ ...p, avg: p.count > 0 ? Math.round(p.totalScore / p.count) : 0 }));
+  const sorted  = [...withAvg].sort((a, b) => b.avg - a.avg);
+  const maxAvg  = Math.max(...sorted.map(p => p.avg), 1);
+  const W = cw(el);
+  const ROW_H = 20, GAP = 10, LABEL_W = 76, NUM_W = 74;
+  const BAR_W = Math.max(40, W - LABEL_W - NUM_W);
+  const H = sorted.length * (ROW_H + GAP) - GAP;
+
+  let svg = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`;
+  sorted.forEach((p, i) => {
+    const y = i * (ROW_H + GAP);
+    const w = Math.max(2, (Math.max(p.avg, 0) / maxAvg) * BAR_W);
+    svg += barName(p, y, ROW_H);
+    svg += `<rect x="${LABEL_W}" y="${y}" width="${w.toFixed(1)}" height="${ROW_H}" rx="4" fill="${p.color}" opacity="0.88"${animAttr(A, 'a-grow', i * 0.06)}/>`;
+    // Ø-Wert + Anzahl Spiele in einer Zeile (vorher überlappten die beiden Texte)
+    svg += `<text x="${(LABEL_W + w + 6).toFixed(1)}" y="${(y + ROW_H * 0.72).toFixed(1)}" font-family="DM Mono,monospace"${animAttr(A, 'a-fade', 0.5 + i * 0.06)}>` +
+           `<tspan font-size="10.5" font-weight="700" fill="${p.color}">${p.avg}</tspan><tspan font-size="8.5" fill="#7e7d9a"> · ${p.count}×</tspan></text>`;
+  });
+  svg += '</svg>';
+  el.innerHTML = svg;
+}
+
+// ── Karte 5: Aktivitäts-Heatmap ──────────────────────
+// Wie GitHub-Contributions: jeder Tag = ein Kästchen, Farbe = Anzahl Sessions.
+// Wochen beginnen am Montag; so viele Wochen wie auf den Screen passen.
+function renderHeatmap(sessions, A) {
+  const el = $('sc-heatmap');
+  const sub = $('hm-sub');
+  if (!sessions.length) { el.innerHTML = '<div class="empty-stats">Keine Daten</div>'; sub.textContent = ''; return; }
+
+  const counts = {};
+  sessions.forEach(s => { counts[s.date] = (counts[s.date] || 0) + 1; });
+  const maxCount = Math.max(...Object.values(counts), 1);
+
+  const SZ = 12, GAP = 3, LBL = 22;
+  const avail = cw(el.parentElement);
+  const WEEKS = clamp(Math.floor((avail - LBL) / (SZ + GAP)), 8, 26);
+  sub.textContent = `letzte ${WEEKS} Wochen`;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const todayStr = localYMD(today);
+  const dow = (today.getDay() + 6) % 7; // 0 = Montag
+  const start = new Date(today);
+  start.setDate(today.getDate() - dow - (WEEKS - 1) * 7);
+
+  const W = LBL + WEEKS * (SZ + GAP);
+  const H = 16 + 7 * (SZ + GAP);
+  let svg = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`;
+  ['Mo', '', 'Mi', '', 'Fr', '', ''].forEach((d, di) => {
+    if (d) svg += `<text x="0" y="${(16 + di * (SZ + GAP) + SZ * 0.8).toFixed(1)}" font-family="DM Mono,monospace" font-size="8" fill="#7e7d9a">${d}</text>`;
+  });
+  const months = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
+  let lastMonth = -1, lastLabelX = -99;
+  for (let w = 0; w < WEEKS; w++) {
+    const x = LBL + w * (SZ + GAP);
+    const colDate = new Date(start); colDate.setDate(start.getDate() + w * 7);
+    if (colDate.getMonth() !== lastMonth) {
+      lastMonth = colDate.getMonth();
+      if (x - lastLabelX > 26) { svg += `<text x="${x}" y="10" font-family="DM Mono,monospace" font-size="8" fill="#7e7d9a">${months[lastMonth]}</text>`; lastLabelX = x; }
+    }
+    for (let d = 0; d < 7; d++) {
+      const date = new Date(start);
+      date.setDate(start.getDate() + w * 7 + d);
+      if (date > today) continue;
+      const ds = localYMD(date);
+      const c = counts[ds] || 0;
+      const fill = c ? `rgba(255,107,53,${(0.25 + (c / maxCount) * 0.75).toFixed(2)})` : '#1f1e30';
+      const isToday = ds === todayStr;
+      const stroke = isToday ? '#fffffe' : c ? 'rgba(255,107,53,0.35)' : '#2a2940';
+      svg += `<rect x="${x}" y="${16 + d * (SZ + GAP)}" width="${SZ}" height="${SZ}" rx="2.5" fill="${fill}" stroke="${stroke}" stroke-width="${isToday ? 1 : 0.5}"${animAttr(A, 'a-pop', w * 0.022 + d * 0.012)}>`;
+      if (c) svg += `<title>${ds}: ${c} Spiel${c > 1 ? 'e' : ''}</title>`;
+      svg += '</rect>';
+    }
+  }
+  svg += '</svg>';
+  el.innerHTML = svg + `<div class="hm-legend">weniger<span></span><i style="background:#1f1e30;border:1px solid #2a2940"></i><i style="background:rgba(255,107,53,.4)"></i><i style="background:rgba(255,107,53,.7)"></i><i style="background:#ff6b35"></i><span></span>mehr</div>`;
+}
+</script>
+
+<script>
+// ── Resize / Drehen ────────────────────────────────────
+let resizeT = null;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeT);
+  resizeT = setTimeout(() => {
+    if (document.body.dataset.screen === 'game' && state.players.length) { sizePie(); renderPie(); }
+    if ($('stats-screen').classList.contains('open')) renderStats(false);
+  }, 100);
+});
+
+// ── Laufendes Spiel wiederherstellen ────────────────────
+// Läuft beim Laden: existiert ein gesichertes Spiel, direkt ins
+// Spiel springen statt zum Setup (überlebt Splitscreen-Reload).
+(function restoreLiveGame() {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(LIVE_KEY)); } catch (e) {}
+  if (!saved || !Array.isArray(saved.players) || !saved.players.length) return;
+  state.players = saved.players;
+  state.history = Array.isArray(saved.history) ? saved.history : [];
+  state.schnell = !!saved.schnell;
+  state.ziel    = saved.ziel || 200;
+  (saved.confetti || []).forEach(i => confettiFired.add(i));
+  if (Number.isInteger(saved.startIdx) && saved.startIdx < state.players.length) startPlayerIdx = saved.startIdx;
+  showGame(true, true);
+  if (Number.isInteger(saved.activeIdx) && state.players[saved.activeIdx]) {
+    selectPlayer(saved.activeIdx, false); // false = Tastatur nicht aufpoppen lassen
+  }
+})();
+</script>
 <script>
 // ── PWA Service Worker (Offline-Cache) ─────────────────────
 // Wird als Blob-URL registriert, damit keine separate sw.js-Datei nötig ist.
 // Cached die HTML beim ersten Laden → App funktioniert danach komplett offline.
 if ('serviceWorker' in navigator) {
   const swCode = `
-    const CACHE = 'flip7-v28';
+    const CACHE = 'flip7-v30';
     self.addEventListener('install', e => {
       e.waitUntil(
         caches.open(CACHE).then(c => c.addAll([self.location.href.replace(/\\/[^\\/]*$/, '') + '/']))
