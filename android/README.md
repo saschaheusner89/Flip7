@@ -8,12 +8,54 @@ Die Hülle bringt gegenüber der reinen HTML:
 - Display bleibt an
 - kein Neuladen bei Splitscreen/Drehen
 - Zurück-Taste schließt erst offene Fenster (`window.flip7Back`)
+- „Teilen“ für die Datensicherung (`Flip7Native.share`)
 
-## Bauen (ohne Android-SDK)
+## Damit Updates die Statistik behalten – die 4 Regeln
+
+Android behält die Daten (Statistik, Medaillen, Namen, Farben) nur, wenn die neue APK als
+**Update** über die installierte App geht und die Seite ihren Speicher wiederfindet:
+
+| # | Was | Wert | Wenn falsch … |
+|---|-----|------|---------------|
+| 1 | Paket-Name | `io.github.saschaheusner89.flip7` | andere App → Statistik nicht da |
+| 2 | Signaturschlüssel | `flip7-release.p12` (Fingerabdruck in `signing-cert.sha256`) | Android verweigert das Update |
+| 3 | Lade-Adresse | `https://appassets.androidplatform.net/index.html` | App findet ihren Speicher nicht |
+| 4 | versionCode | muss steigen | Android verweigert das „Downgrade“ |
+
+`build.sh` prüft 1–3 bei jedem Build und **bricht ab**, statt eine unpassende APK zu erzeugen.
+Nie die alte App deinstallieren, um ein Update zu erzwingen – dabei wäre die Statistik weg.
+Vorher immer **Statistik → Daten übertragen → Sichern**.
+
+## Normaler Weg: automatisch auf GitHub bauen (kein PC nötig)
+
+Bei jeder Änderung an `index.html` auf `main` baut GitHub Actions
+(`.github/workflows/build-apk.yml`) die APK mit dem richtigen Schlüssel.
+Die fertige APK liegt dann immer unter derselben Adresse:
+
+**https://github.com/saschaheusner89/Flip7/releases/latest/download/flip7.apk**
+
+1. `index.html` ändern und im `<title>` die Version hochzählen, z. B. `Score v34`.
+2. Auf `main` committen (geht auch im GitHub-Web-Editor am Handy).
+3. Nach ca. 2–3 Minuten den Link oben am Handy öffnen und installieren.
+   Das ist ein Update, die Statistik bleibt.
+
+Der versionCode wird automatisch gesetzt (1000 + Build-Nummer) und steigt immer.
+
+### Einmalige Einrichtung
+
+In GitHub unter **Settings → Secrets and variables → Actions → New repository secret** zwei Einträge anlegen:
+
+- **`FLIP7_KEYSTORE_B64`**: der Schlüssel als Text (Base64 von `flip7-release.p12`).
+  Unter Windows erzeugt man ihn in PowerShell so:
+  `[Convert]::ToBase64String([IO.File]::ReadAllBytes("flip7-release.p12"))`
+- **`FLIP7_KS_PASS`**: das Passwort des Schlüssels.
+
+Fehlen die Secrets, bricht der Build mit einer klaren Meldung ab. Er erzeugt nie einen neuen Schlüssel.
+
+## Selbst bauen (Linux/WSL/Git-Bash, ohne Android-SDK)
 
 ```bash
-KS_PASS='<passwort>' ./build.sh                       # → build/flip7-v33.apk
-VERSION_CODE=34 VERSION_NAME=34 KS_PASS='…' ./build.sh
+KS_PASS='<passwort>' VERSION_CODE=<höher als installiert> ./build.sh   # → build/flip7-v<Version>.apk
 ```
 
 Die Werkzeuge lädt `build.sh` selbst von Maven Central bzw. GitHub nach `.tools/`:
@@ -23,9 +65,24 @@ Die Werkzeuge lädt `build.sh` selbst von Maven Central bzw. GitHub nach `.tools
 - apksig
 - android-all als API-35-Klassen
 
+Den Schlüssel `flip7-release.p12` neben `build.sh` legen.
+
+## Anders bauen (z. B. Android Studio)?
+
+Das geht, solange alle 4 Regeln eingehalten werden:
+
+- `MainActivity.java`, `AndroidManifest.xml`, `res/` und `assets/fonts/` aus diesem Ordner übernehmen.
+- `index.html` nach `assets/` legen.
+- Mit `flip7-release.p12` signieren (Typ PKCS12, Alias `flip7`, Schlüssel-Passwort = Keystore-Passwort).
+- Den Fingerabdruck des Zertifikats mit `signing-cert.sha256` vergleichen.
+
+## Sicherheitsnetz
+
+Unter **Statistik → Daten übertragen** lässt sich alles als Text sichern und in einer anderen App bzw. auf
+einem anderen Handy wieder laden. Ab und zu **Sichern → Teilen** (z. B. per Mail an sich selbst) schadet nie.
+
 ## Signaturschlüssel
 
-`flip7-release.p12` (+ Passwort) **nie ins Git** – das Repo ist öffentlich.
-Updates lassen sich nur mit demselben Schlüssel über die installierte App installieren.
-Mit einem anderen Schlüssel müsste man die App erst deinstallieren, und dabei gehen Statistik und Medaillen verloren.
-Fehlt der Schlüssel, erzeugt `build.sh` einen neuen.
+`flip7-release.p12` und das Passwort **nie ins Git** – das Repo ist öffentlich.
+Beides sicher aufbewahren, z. B. im Passwort-Manager oder in der Cloud.
+Geht der Schlüssel verloren, sind keine Updates mehr möglich. Dann bleibt nur der Umzug per „Daten übertragen“ in eine neu signierte App.

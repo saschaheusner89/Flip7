@@ -2,7 +2,7 @@
 # Baut die Flip-7-APK aus ../index.html – ganz ohne Android-SDK/Gradle.
 # Werkzeuge kommen von Maven Central bzw. GitHub (aapt2 steckt in apktool).
 #
-#   ./build.sh                    → build/flip7-v<VERSION>.apk
+#   KS_PASS=… ./build.sh          → build/flip7-v<VERSION>.apk (Version aus dem <title> der index.html)
 #   VERSION_CODE=34 VERSION_NAME=34 KS_PASS=… ./build.sh
 #
 # WICHTIG: Updates lassen sich nur über die alte App installieren, wenn sie mit
@@ -13,8 +13,17 @@ TOOLS="${TOOLS:-$HERE/.tools}"
 OUT="$HERE/build"
 KEYSTORE="${KEYSTORE:-$HERE/flip7-release.p12}"   # nicht ins Git (Repo ist öffentlich)!
 KS_PASS="${KS_PASS:-}"
-VERSION_CODE="${VERSION_CODE:-33}"
-VERSION_NAME="${VERSION_NAME:-33}"
+VERSION_CODE="${VERSION_CODE:-33}"   # muss bei jedem Update steigen (GitHub-Build: 1000 + Build-Nummer)
+VERSION_NAME="${VERSION_NAME:-$(sed -n 's/.*Score v\([0-9.]*\)<\/title>.*/\1/p' "$HERE/../index.html" | head -1)}"
+REQUIRE_KEYSTORE="${REQUIRE_KEYSTORE:-${CI:-}}"   # in CI nie einen neuen Schlüssel erzeugen
+
+# ── Die 4 Regeln, damit Updates die Statistik behalten ──────────────
+EXPECTED_PACKAGE="io.github.saschaheusner89.flip7"
+EXPECTED_HOST="appassets.androidplatform.net"
+grep -q "package=\"$EXPECTED_PACKAGE\"" "$HERE/AndroidManifest.xml" \
+  || { echo "FEHLER: Paket-Name im Manifest geändert – die App wäre eine andere, die Statistik weg!"; exit 1; }
+grep -q "HOST = \"$EXPECTED_HOST\"" "$HERE/src/io/github/saschaheusner89/flip7/MainActivity.java" \
+  || { echo "FEHLER: Lade-Adresse in MainActivity geändert – die App fände ihren Speicher nicht mehr!"; exit 1; }
 MIN_SDK=24
 TARGET_SDK=35
 
@@ -52,6 +61,10 @@ python3 "$HERE/tools/package.py" build "$OUT/linked.apk" "$OUT/classes.dex" "$OU
 
 echo "5/5 Signieren (APK Signature Scheme v2)"
 if [ ! -f "$KEYSTORE" ]; then
+  if [ -n "$REQUIRE_KEYSTORE" ]; then
+    echo "FEHLER: Signaturschlüssel fehlt ($KEYSTORE). Ohne den bisherigen Schlüssel lässt sich die App nicht als Update installieren."
+    exit 1
+  fi
   KS_PASS="${KS_PASS:-$(python3 -c 'import secrets; print(secrets.token_urlsafe(12))')}"
   keytool -genkeypair -keystore "$KEYSTORE" -storetype PKCS12 -storepass "$KS_PASS" -keypass "$KS_PASS" \
     -alias flip7 -keyalg RSA -keysize 3072 -validity 36500 -dname "CN=Flip 7 Score Tracker" >/dev/null 2>&1
@@ -60,6 +73,17 @@ fi
 [ -n "$KS_PASS" ] || { echo "Bitte KS_PASS (Passwort von $KEYSTORE) setzen"; exit 1; }
 APK="$OUT/flip7-v$VERSION_NAME.apk"
 # apksig 2.3.0 (neueste Version auf Maven Central) braucht beim Laden dieses JDK-Interna
-java --add-exports java.base/sun.security.x509=ALL-UNNAMED -cp "$TOOLS/apksig.jar" "$HERE/tools/Sign.java" "$OUT/unsigned.apk" "$APK" "$KEYSTORE" "$KS_PASS"
+SIGN_LOG=$(java --add-exports java.base/sun.security.x509=ALL-UNNAMED -cp "$TOOLS/apksig.jar" "$HERE/tools/Sign.java" "$OUT/unsigned.apk" "$APK" "$KEYSTORE" "$KS_PASS")
+echo "$SIGN_LOG"
+CERT=$(echo "$SIGN_LOG" | sed -n 's/^zertifikat-sha256=//p')
+if [ -f "$HERE/signing-cert.sha256" ]; then
+  if [ "$CERT" != "$(tr -d ' \r\n' < "$HERE/signing-cert.sha256")" ]; then
+    rm -f "$APK"
+    echo "FEHLER: FALSCHER SCHLÜSSEL! Diese APK ließe sich nicht über die installierte App installieren."
+    echo "        Richtiger Fingerabdruck: $(cat "$HERE/signing-cert.sha256")"
+    exit 1
+  fi
+  echo "Schlüssel geprüft ✓ – installiert sich als Update, Statistik bleibt erhalten"
+fi
 python3 "$HERE/tools/package.py" check "$APK"
 echo "Fertig: $APK ($(du -h "$APK" | cut -f1))"

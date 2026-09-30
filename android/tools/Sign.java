@@ -30,5 +30,9 @@ public class Sign {
         for (Object e : r.getErrors()) System.out.println("FEHLER " + e);
         for (Object w : r.getWarnings()) System.out.println("Warnung " + w);
         if (!r.isVerified()) System.exit(1);
+        byte[] h = java.security.MessageDigest.getInstance("SHA-256").digest(cert.getEncoded());
+        StringBuilder hex = new StringBuilder();
+        for (byte x : h) hex.append(String.format("%02x", x));
+        System.out.println("zertifikat-sha256=" + hex);
     }
 }

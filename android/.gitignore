@@ -5,3 +5,6 @@ build/
 *.jks
 *.keystore
 icon/out/
+
+# Schlüssel in Textform (für GitHub-Secrets) nie committen
+*base64*.txt
