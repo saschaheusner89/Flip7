@@ -1,0 +1,10 @@
+# Build-Ausgabe, heruntergeladene Werkzeuge und der Signaturschlüssel gehören nicht ins Git
+build/
+.tools/
+*.p12
+*.jks
+*.keystore
+icon/out/
+
+# Schlüssel in Textform (für GitHub-Secrets) nie committen
+*base64*.txt

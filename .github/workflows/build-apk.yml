@@ -1,0 +1,81 @@
+# Baut bei jeder Änderung an index.html (bzw. android/) automatisch die Flip-7-APK –
+# immer mit DEMSELBEN Schlüssel, damit sie sich als Update installieren lässt und
+# die Statistik erhalten bleibt. Download danach:
+#   https://github.com/saschaheusner89/Flip7/releases/latest/download/flip7.apk
+#
+# Einmalig nötig (GitHub → Settings → Secrets and variables → Actions):
+#   FLIP7_KEYSTORE_B64  = Inhalt von flip7-keystore-base64.txt
+#   FLIP7_KS_PASS       = Passwort des Schlüssels
+name: APK bauen
+
+on:
+  push:
+    branches: [main]
+    paths: ['index.html', 'android/**', '.github/workflows/build-apk.yml']
+  pull_request:
+    paths: ['index.html', 'android/**', '.github/workflows/build-apk.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apk-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Werkzeuge aus dem Cache
+        uses: actions/cache@v4
+        with:
+          path: android/.tools
+          key: flip7-tools-${{ hashFiles('android/build.sh') }}
+
+      - name: Signaturschlüssel aus den Secrets holen
+        env:
+          KEYSTORE_B64: ${{ secrets.FLIP7_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "::error::Secret FLIP7_KEYSTORE_B64 fehlt – ohne den bisherigen Schlüssel gäbe es kein installierbares Update (siehe android/README.md)."
+            exit 1
+          fi
+          printf '%s' "$KEYSTORE_B64" | tr -d ' \r\n' | base64 -d > android/flip7-release.p12
+
+      - name: APK bauen und prüfen (Paket, Lade-Adresse, Schlüssel)
+        env:
+          KS_PASS: ${{ secrets.FLIP7_KS_PASS }}
+          REQUIRE_KEYSTORE: '1'
+        run: |
+          export VERSION_CODE=$((1000 + GITHUB_RUN_NUMBER))
+          ./android/build.sh
+          rm -f android/flip7-release.p12
+
+      - name: Als Release veröffentlichen
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          APK=$(ls android/build/flip7-v*.apk | head -1)
+          VERSION=$(basename "$APK" .apk | sed 's/^flip7-//')
+          cp "$APK" flip7.apk
+          gh release create "apk-$((1000 + GITHUB_RUN_NUMBER))" flip7.apk \
+            --target "$GITHUB_SHA" --latest \
+            --title "Flip 7 $VERSION (Build $GITHUB_RUN_NUMBER)" \
+            --notes "flip7.apk auf dem Handy herunterladen und öffnen. Installiert sich als Update über die bisherige App – Statistik, Medaillen und Namen bleiben erhalten."
+
+      - name: APK zum Testen anhängen (Pull Request)
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: flip7-apk-test
+          path: android/build/flip7-v*.apk
+          retention-days: 7
