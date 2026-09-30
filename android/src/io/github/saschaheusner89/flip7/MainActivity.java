@@ -1,6 +1,7 @@
 package io.github.saschaheusner89.flip7;
 
 import android.app.Activity;
+import android.content.Context;
 import android.content.Intent;
 import android.graphics.drawable.ColorDrawable;
 import android.net.Uri;
@@ -11,6 +12,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowInsets;
 import android.view.WindowManager;
+import android.view.inputmethod.InputMethodManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.webkit.WebResourceRequest;
@@ -122,8 +124,26 @@ public class MainActivity extends Activity {
         super.onDestroy();
     }
 
-    /** Brücke für die Seite: Teilen-Menü (Datensicherung) und kurzes haptisches Feedback. */
+    /** Brücke für die Seite: Teilen-Menü (Datensicherung), Tastatur und kurzes haptisches Feedback. */
     private class NativeBridge {
+        /**
+         * Tastatur zeigen. Die Seite ruft das nur auf, wenn das Punkte-Feld schon den Fokus hat –
+         * z. B. nachdem die Tastatur per Zurück-Geste weggewischt wurde (das Feld behält dabei den Fokus,
+         * ein erneutes focus() in der Seite holt sie dann nicht zurück).
+         */
+        @JavascriptInterface
+        public void keyboard() {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    if (web == null) return;
+                    if (!web.hasFocus()) web.requestFocus();
+                    InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+                    if (imm != null) imm.showSoftInput(web, 0);
+                }
+            });
+        }
+
         /** "long" = lange gedrückt, sonst kurzer Tick (nutzt die System-Haptik, keine Berechtigung nötig). */
         @JavascriptInterface
         public void haptic(final String kind) {

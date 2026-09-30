@@ -25,7 +25,7 @@
 
 <!-- iOS Home Screen Icon (SVG als Data-URI) -->
 <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='100' fill='%230f0e17'/><text x='256' y='310' text-anchor='middle' font-family='Arial Black,sans-serif' font-size='260' font-weight='900'><tspan fill='%23fffffe'>F</tspan><tspan fill='%23ff6b35'>7</tspan></text></svg>">
-<title>Flip 7 · Score v36</title>
+<title>Flip 7 · Score v37</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script>
@@ -331,6 +331,7 @@
     background: linear-gradient(180deg, rgba(15,14,23,.55), rgba(15,14,23,.2));
     border-bottom: 1px solid var(--border);
     z-index: 5;
+    -webkit-user-select: none; user-select: none;   /* langes Drücken markiert keinen Text (Fokus bleibt im Feld) */
   }
   #game.enter { animation: fadeIn .4s ease-out both; }
 
@@ -579,6 +580,7 @@
     padding: 0 0.75rem; height: 44px;
     text-align: center; outline: none;
     transition: border-color 0.3s, box-shadow .3s;
+    -webkit-user-select: text; user-select: text;
   }
   #delta-input:focus { box-shadow: 0 0 0 3px var(--pc-a), 0 0 18px -4px var(--pc); }
   #delta-input.shake { animation: shakeX .35s ease-in-out; }
@@ -1843,6 +1845,9 @@ function renderPie() {
     const isWinner = hasWinner && p.score === maxScore;
     const isActive = i === activeIdx;
     const g = svgEl('g', { class: 'pie-slice', 'data-i': i });
+    // Tastatur bleibt offen. Der Listener sitzt direkt am Stück, weil die Torte schon beim pointerup neu
+    // gebaut wird – das touchend landet dann am alten, abgehängten Stück und erreicht das <svg> nicht mehr.
+    g.addEventListener('touchend', e => e.preventDefault(), { passive: false });
     if (isWinner) g.setAttribute('filter', 'url(#glow)');
 
     const track = svgEl('path', { fill: p.color, opacity: '0.15' });
@@ -2065,6 +2070,10 @@ function endPress(e) {
 pieSvg.addEventListener('pointerup', endPress);
 pieSvg.addEventListener('pointercancel', endPress);
 pieSvg.addEventListener('contextmenu', e => e.preventDefault());
+// Tastatur bleibt offen: Ohne preventDefault schickt der Browser nach dem Loslassen Maus-Ersatz-
+// ereignisse, die dem Eingabefeld den Fokus nehmen. Die Gesten laufen komplett über die Pointer-Events.
+// (Die Tortenstücke haben dafür einen eigenen Listener, siehe renderPie.)
+pieSvg.addEventListener('touchend', e => e.preventDefault(), { passive: false });
 
 // ── Pro Frame: Geometrie aus dem Animationszustand ────
 function drawPie(now) {
@@ -2826,7 +2835,7 @@ function selectPlayer(idx, focus = true) {
   subBtn.style.borderColor = p.color;
   resetSubBtn();
   deltaInput.value = '';
-  if (focus) deltaInput.focus();
+  if (focus) showKeyboard();
   if (changed) retrigger(chip, 'flip');
   renderPie();
   FX.kick();
@@ -2835,8 +2844,26 @@ function selectPlayer(idx, focus = true) {
 
 addBtn.addEventListener('click', () => commitScore(false, addBtn));
 deltaInput.addEventListener('keydown', e => { if (e.key === 'Enter') commitScore(false, deltaInput); });
-// Tastatur bleibt offen, wenn ADD/SUB getippt wird (kein Fokus-Wechsel)
-[addBtn, subBtn].forEach(b => b.addEventListener('mousedown', e => { if (document.activeElement === deltaInput) e.preventDefault(); }));
+// Tastatur bleibt offen: Tippen oder langes Drücken irgendwo im Spielfeld (Torte, ADD/SUB, Chip, Uhr, Podium …)
+// nimmt dem Eingabefeld nie den Fokus. Nur die Knöpfe oben rechts öffnen Fenster und dürfen die Tastatur schließen.
+function keepsFocus(e) {
+  if (document.activeElement !== deltaInput) return false;
+  const t = e.target;
+  if (t === document.body || t === document.documentElement) return true;   // Hintergrund, z. B. unter dem Podium
+  return !!(t.closest && t.closest('#game') && !t.closest('.bar-actions, input, textarea, select'));
+}
+// Finger: schon beim Aufsetzen abfangen – sonst verschiebt Android beim langen Drücken den Fokus
+document.addEventListener('pointerdown', e => { if (e.pointerType !== 'mouse' && keepsFocus(e)) e.preventDefault(); }, true);
+// Maus bzw. die Maus-Ersatzereignisse nach einem Tipp
+document.addEventListener('mousedown', e => { if (keepsFocus(e)) e.preventDefault(); }, true);
+
+// Tastatur zeigen. Hat das Feld den Fokus schon (Tastatur z. B. per Zurück-Geste weggewischt),
+// bewirkt focus() nichts – dann holt die App (APK) die Tastatur nativ zurück.
+function showKeyboard() {
+  const had = document.activeElement === deltaInput;
+  deltaInput.focus();
+  if (had && window.Flip7Native && Flip7Native.keyboard) { try { Flip7Native.keyboard(); } catch (e) {} }
+}
 
 // Sub-btn: double-tap to confirm (mit ablaufendem Countdown-Balken)
 let subTapTimer = null;
@@ -2893,7 +2920,7 @@ function commitScore(subtract = false, srcEl = null) {
   } else if (crossed) celebrate();
 
   renderPie();
-  deltaInput.focus();
+  showKeyboard();
   showToast(`${p.name}: ${val >= 0 ? '+' : ''}${val} → ${p.score}`, p.color);
   saveLiveGame();
   FX.kick();
@@ -3753,7 +3780,7 @@ window.flip7Back = function () {
 // Cached die HTML beim ersten Laden → App funktioniert danach komplett offline.
 if ('serviceWorker' in navigator) {
   const swCode = `
-    const CACHE = 'flip7-v36';
+    const CACHE = 'flip7-v37';
     self.addEventListener('install', e => {
       e.waitUntil(
         caches.open(CACHE).then(c => c.addAll([self.location.href.replace(/\\/[^\\/]*$/, '') + '/']))

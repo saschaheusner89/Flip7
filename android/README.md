@@ -9,6 +9,7 @@ Die Hülle bringt gegenüber der reinen HTML:
 - kein Neuladen bei Splitscreen/Drehen
 - Zurück-Taste schließt erst offene Fenster (`window.flip7Back`)
 - „Teilen“ für die Datensicherung (`Flip7Native.share`)
+- Tastatur zurückholen: Wurde sie weggewischt, bringt sie ein Tipp auf eine Spieler:in wieder (`Flip7Native.keyboard`)
 
 ## Damit Updates die Statistik behalten – die 4 Regeln
 
