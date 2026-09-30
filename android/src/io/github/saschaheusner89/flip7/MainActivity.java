@@ -6,6 +6,7 @@ import android.graphics.drawable.ColorDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.view.HapticFeedbackConstants;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowInsets;
@@ -121,8 +122,20 @@ public class MainActivity extends Activity {
         super.onDestroy();
     }
 
-    /** Brücke für die Seite: öffnet das Android-Teilen-Menü (z. B. Datensicherung per WhatsApp/Mail an sich selbst). */
+    /** Brücke für die Seite: Teilen-Menü (Datensicherung) und kurzes haptisches Feedback. */
     private class NativeBridge {
+        /** "long" = lange gedrückt, sonst kurzer Tick (nutzt die System-Haptik, keine Berechtigung nötig). */
+        @JavascriptInterface
+        public void haptic(final String kind) {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    if (web != null) web.performHapticFeedback("long".equals(kind)
+                            ? HapticFeedbackConstants.LONG_PRESS : HapticFeedbackConstants.VIRTUAL_KEY);
+                }
+            });
+        }
+
         @JavascriptInterface
         public void share(final String text) {
             runOnUiThread(new Runnable() {

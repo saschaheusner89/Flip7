@@ -25,7 +25,7 @@
 
 <!-- iOS Home Screen Icon (SVG als Data-URI) -->
 <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='100' fill='%230f0e17'/><text x='256' y='310' text-anchor='middle' font-family='Arial Black,sans-serif' font-size='260' font-weight='900'><tspan fill='%23fffffe'>F</tspan><tspan fill='%23ff6b35'>7</tspan></text></svg>">
-<title>Flip 7 · Score v33</title>
+<title>Flip 7 · Score v34</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script>
@@ -381,9 +381,12 @@
   #pie-svg {
     position: relative; z-index: 1; display: block;
     width: 100%; height: 100%;
-    touch-action: manipulation;
+    touch-action: none;                 /* Gesten (Doppeltippen, lange drücken) selbst auswerten */
+    -webkit-touch-callout: none; -webkit-user-select: none; user-select: none;
     overflow: visible;
   }
+  /* Texte (Punkte, Namen, Medaillen) liegen über den Effekten → immer lesbar */
+  #pie-text { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 4; pointer-events: none; overflow: visible; }
   /* Farbiger Halo hinter der Torte (einmal gezeichnet, dann nur per GPU "geatmet") */
   #pie-halo {
     position: absolute; left: -15%; top: -15%; width: 130%; height: 130%;
@@ -393,7 +396,7 @@
   @keyframes haloBreath { from { transform: scale(.94); opacity: .3; } to { transform: scale(1.03); opacity: .6; } }
   /* Glühender Rahmen um das aktive Tortenstück */
   #pie-glow {
-    position: absolute; inset: 0; width: 100%; height: 100%; z-index: 2;
+    position: absolute; inset: 0; width: 100%; height: 100%; z-index: 3;
     pointer-events: none; overflow: visible;
     animation: glowBreath 1.6s ease-in-out infinite alternate;
   }
@@ -401,7 +404,7 @@
   /* Glanz-Streifen, der ab und zu über die Torte wischt */
   #pie-gloss {
     position: absolute; inset: 1%; border-radius: 50%; overflow: hidden;
-    pointer-events: none; z-index: 3;
+    pointer-events: none; z-index: 5;
   }
   #pie-gloss::before {
     content: ''; position: absolute; top: -20%; left: 0; width: 30%; height: 140%;
@@ -410,7 +413,102 @@
     animation: shine 9s ease-in-out 4s infinite;
   }
   /* Schwebende "+12"-Labels */
-  #pie-labels { position: absolute; inset: 0; pointer-events: none; z-index: 4; }
+  #pie-labels { position: absolute; inset: 0; pointer-events: none; z-index: 6; }
+
+  /* ===== Geheime Tortenstück-Effekte =====
+     Doppeltippen = an/aus, lange drücken = nächster Effekt.
+     Jede Ebene ist aufs Stück zugeschnitten (clip-path) und bewegt sich nur per
+     transform/opacity → läuft auf der GPU, die Torte wird nicht neu gezeichnet.
+     Farben sind aufgehellte/abgedunkelte Töne der Spielerfarbe (halbtransparent). */
+  #pie-fx { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+  .pfx {
+    position: absolute; left: 0; top: 0; width: 400px; height: 400px;
+    transform-origin: 0 0; pointer-events: none; overflow: hidden;
+    animation: pfxIn .6s var(--ease-out) both;
+    transition: opacity .35s;
+  }
+  @keyframes pfxIn { from { opacity: 0; } }
+  .pfx > i { position: absolute; display: block; will-change: transform, opacity; }
+
+  /* 1 ✨ Glanz */
+  .pfx-glanz > i:nth-child(1) { inset: 0; background: radial-gradient(circle at 200px 200px, transparent 0 31%, rgba(255,255,255,.14) 55%, rgba(255,255,255,.34) 86%, rgba(255,255,255,.08) 93%, transparent 95%); }
+  .pfx-glanz > i:nth-child(2) {
+    left: 0; top: -100px; width: 110px; height: 600px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,.35) 35%, rgba(255,255,255,.75) 50%, rgba(255,255,255,.35) 65%, transparent);
+    transform: translateX(160px) rotate(22deg);
+    animation: pfxSheen 2.4s ease-in-out infinite;
+  }
+  @keyframes pfxSheen { 0% { transform: translateX(-150px) rotate(22deg); } 60%, 100% { transform: translateX(470px) rotate(22deg); } }
+
+  /* 2 🍭 Zuckerstange */
+  .pfx-candy > i {
+    left: -40px; top: -40px; width: 520px; height: 480px;
+    background: repeating-linear-gradient(45deg, var(--cl) 0 9px, transparent 9px 17px, var(--cd) 17px 21px, transparent 21px 24px);
+    animation: pfxStripe 1.4s linear infinite;
+  }
+  @keyframes pfxStripe { to { transform: translateX(-33.94px); } }
+
+  /* 3 💎 Glitzer */
+  .pfx-glitzer > i { left: -40px; top: -40px; width: 480px; height: 480px; }
+  .pfx-glitzer > i:nth-child(1) {
+    background-image: radial-gradient(circle, #fff 0 1.3px, transparent 2.2px), radial-gradient(circle, var(--cl) 0 1.1px, transparent 1.9px);
+    background-size: 23px 23px, 23px 23px; background-position: 0 0, 11px 13px;
+    animation: pfxTwinkle 1.4s ease-in-out infinite alternate, pfxDrift 7s linear infinite;
+  }
+  .pfx-glitzer > i:nth-child(2) {
+    background-image: radial-gradient(circle, #fff 0 1.1px, transparent 2px);
+    background-size: 31px 31px; background-position: 15px 6px;
+    animation: pfxTwinkle 1.9s ease-in-out .7s infinite alternate-reverse;
+  }
+  @keyframes pfxTwinkle { from { opacity: .12; } to { opacity: 1; } }
+  @keyframes pfxDrift { to { transform: translate(-23px, -23px); } }
+
+  /* 4 📡 Sonar */
+  .pfx-sonar > i {
+    left: 20px; top: 20px; width: 360px; height: 360px; border-radius: 50%;
+    border: 5px solid var(--cl); box-shadow: 0 0 10px var(--cl), inset 0 0 10px var(--cl);
+    transform: scale(.6); opacity: .5;
+    animation: pfxSonar 2.7s cubic-bezier(.2, .6, .35, 1) infinite backwards;
+  }
+  .pfx-sonar > i:nth-child(2) { animation-delay: .9s; }
+  .pfx-sonar > i:nth-child(3) { animation-delay: 1.8s; }
+  @keyframes pfxSonar { 0% { transform: scale(.3); opacity: 0; } 12% { opacity: .95; } 100% { transform: scale(1.08); opacity: 0; } }
+
+  /* 5 ⚡ Neon (nur der Rand des Stücks, Lauflicht dreht) */
+  .pfx-neon > i { inset: 0; }
+  .pfx-neon > i:nth-child(1) { background: var(--cl); animation: pfxNeon 1.3s ease-in-out infinite alternate; }
+  .pfx-neon > i:nth-child(2) {
+    background: conic-gradient(from 0deg at 200px 200px, transparent 0deg 20deg, rgba(255,255,255,.95) 45deg, transparent 70deg 200deg, rgba(255,255,255,.8) 225deg, transparent 250deg);
+    transform-origin: 200px 200px; animation: spin 2.4s linear infinite;
+  }
+  @keyframes pfxNeon { from { opacity: .45; } to { opacity: 1; } }
+
+  /* 6 🌌 Aurora */
+  /* Helle und dunkle Wolken kreisen gegenläufig um die Mitte → ziehen durch jedes Stück */
+  .pfx-aurora > i { inset: 0; transform-origin: 200px 200px; }
+  .pfx-aurora > i:nth-child(1) {
+    background: radial-gradient(circle at 200px 70px, var(--cl), transparent 95px), radial-gradient(circle at 313px 265px, var(--cl), transparent 95px),
+                radial-gradient(circle at 87px 265px, var(--cl), transparent 95px);
+    animation: spin 9s linear infinite;
+  }
+  .pfx-aurora > i:nth-child(2) {
+    background: radial-gradient(circle at 200px 330px, var(--cd), transparent 100px), radial-gradient(circle at 87px 135px, var(--cd), transparent 100px),
+                radial-gradient(circle at 313px 135px, var(--cd), transparent 100px);
+    animation: spin 13s linear infinite reverse;
+  }
+  .pfx-aurora > i:nth-child(3) {
+    background: radial-gradient(circle at 200px 200px, transparent 0 32%, rgba(255,255,255,.16) 70%, transparent 95%);
+    animation: pfxNeon 3s ease-in-out infinite alternate;
+  }
+
+  /* 7 7️⃣ Siebener */
+  .pfx-sieben > i {
+    left: -60px; top: -60px; width: 520px; height: 520px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='44' height='44'%3E%3Ctext x='13' y='31' font-family='Arial Black,Arial,sans-serif' font-weight='900' font-size='22' fill='white' fill-opacity='.3' transform='rotate(-12 22 22)'%3E7%3C/text%3E%3C/svg%3E");
+    background-size: 44px 44px;
+    animation: pfxSeven 5s linear infinite;
+  }
+  @keyframes pfxSeven { to { transform: translate(-44px, 44px); } }
   .float-label {
     position: absolute; left: 0; top: 0;
     font-family: 'DM Mono', monospace; font-weight: 500; font-size: 1.35rem; white-space: nowrap;
@@ -1061,6 +1159,7 @@
     <div id="pie-stage">
       <canvas id="pie-halo"></canvas>
       <svg id="pie-svg" viewBox="0 0 400 400"></svg>
+      <div id="pie-fx"></div>
       <svg id="pie-glow" viewBox="0 0 400 400" aria-hidden="true">
         <defs>
           <filter id="glowBlur" x="-30%" y="-30%" width="160%" height="160%">
@@ -1070,6 +1169,7 @@
         </defs>
         <g id="glow-g" filter="url(#glowBlur)"><path id="glow-path" fill="none" stroke="#fff" stroke-width="3.5" stroke-linejoin="round"/></g>
       </svg>
+      <svg id="pie-text" viewBox="0 0 400 400" aria-hidden="true"></svg>
       <div id="pie-gloss"></div>
       <div id="pie-labels"></div>
     </div>
@@ -1571,6 +1671,9 @@ function launchConfetti(base, mode = 'rain') {
 // ══════════════════════════════════════════════════════
 const pieSvg = $('pie-svg');
 const glowSvg = $('pie-glow'), glowG = $('glow-g'), glowPath = $('glow-path');
+const pieText = $('pie-text'), pieFx = $('pie-fx');
+let pieScale = 1;       // Bildschirm-Pixel pro viewBox-Einheit (für die Effekt-Ebenen)
+let fxEls = [];         // pro Spieler: aktive Effekt-Ebene
 let pieAnim = [];      // pro Spieler: Animationszustand
 let inflight = [];     // pro Spieler: Punkte, die noch als Funken unterwegs sind
 let sliceEls = [];     // pro Spieler: DOM-Referenzen
@@ -1598,9 +1701,8 @@ function polar(deg, r) {
   const rad = (deg - 90) * Math.PI / 180;
   return { x: CX + r * Math.cos(rad), y: CY + r * Math.sin(rad) };
 }
-function arc(s, e, rOuter, rInner) {
+function arc(s, e, rOuter, rInner, GAP_PX = 2.5) {
   // Gap in pixels (not degrees) so spacing looks equal at all radii
-  const GAP_PX = 2.5;
   const gOuter = (GAP_PX / rOuter) * (180 / Math.PI);
   const gInner = (GAP_PX / rInner) * (180 / Math.PI);
   const a1 = s + gOuter / 2, b1 = e - gOuter / 2; // outer arc angles
@@ -1700,6 +1802,7 @@ function sparkTarget(i, frac) {
 function renderPie() {
   ensurePieAnim();
   pieSvg.innerHTML = '';
+  pieText.innerHTML = '';
   sliceEls = [];
   const n = state.players.length;
   if (!n) return;
@@ -1733,7 +1836,7 @@ function renderPie() {
   state.players.forEach((p, i) => {
     const isWinner = hasWinner && p.score === maxScore;
     const isActive = i === activeIdx;
-    const g = svgEl('g', { class: 'pie-slice' });
+    const g = svgEl('g', { class: 'pie-slice', 'data-i': i });
     if (isWinner) g.setAttribute('filter', 'url(#glow)');
 
     const track = svgEl('path', { fill: p.color, opacity: '0.15' });
@@ -1773,12 +1876,11 @@ function renderPie() {
       cry.textContent = '😭';
       cg.appendChild(cry); tg.appendChild(cg);
     }
-    g.appendChild(tg);
-
-    g.addEventListener('click', () => selectPlayer(i));
-    g.addEventListener('touchend', e => { e.preventDefault(); selectPlayer(i); });
+    const tw = svgEl('g');            // Text-Ebene über den Effekten
+    tw.appendChild(tg);
+    pieText.appendChild(tw);
     pieSvg.appendChild(g);
-    sliceEls[i] = { g, track, fill, shade: shadeP, edge, tg, score: st };
+    sliceEls[i] = { g, track, fill, shade: shadeP, edge, tg, tw, score: st };
   });
 
   // ── Startspieler-Pfeil am Außenrand (dreht sich animiert weiter) ──
@@ -1816,10 +1918,145 @@ function renderPie() {
   // Glow-Farbe fürs aktive Stück
   if (activeIdx !== null && state.players[activeIdx]) setAttr(glowPath, 'stroke', state.players[activeIdx].color);
   pieCTM = null;
+  syncSliceFx();
   drawPie(performance.now());
   updateHalo();
   updateAmbientColor();
 }
+
+// ══════════════════════════════════════════════════════
+// GEHEIME EFFEKTE PRO TORTENSTÜCK
+// Doppeltippen = Effekt an/aus · lange drücken = nächster Effekt.
+// Gemerkt pro Name (flip7_fx_<name>), also auch im nächsten Spiel.
+// ══════════════════════════════════════════════════════
+const SLICE_FX = [
+  { id: 'glanz',   name: '✨ Glanz',        kids: 2 },
+  { id: 'candy',   name: '🍭 Zuckerstange', kids: 1 },
+  { id: 'glitzer', name: '💎 Glitzer',      kids: 2 },
+  { id: 'sonar',   name: '📡 Sonar',        kids: 3 },
+  { id: 'neon',    name: '⚡ Neon',         kids: 2, ring: true },
+  { id: 'aurora',  name: '🌌 Aurora',       kids: 3 },
+  { id: 'sieben',  name: '7️⃣ Siebener',     kids: 1 },
+];
+const fxKey = p => 'flip7_fx_' + normalizeName(p.name);
+function getSliceFx(p) {
+  try { const id = localStorage.getItem(fxKey(p)); return SLICE_FX.some(f => f.id === id) ? id : null; } catch (e) { return null; }
+}
+function setSliceFx(p, id) {
+  try { if (id) localStorage.setItem(fxKey(p), id); else localStorage.removeItem(fxKey(p)); } catch (e) {}
+}
+function mixHex(a, b, t) {
+  const A = hexToRgb(a), B = hexToRgb(b);
+  const h = v => Math.round(v).toString(16).padStart(2, '0');
+  return '#' + h(A.r + (B.r - A.r) * t) + h(A.g + (B.g - A.g) * t) + h(A.b + (B.b - A.b) * t);
+}
+// Effekt-Ebenen an die aktuelle Spielerliste anpassen
+function syncSliceFx() {
+  const n = state.players.length;
+  for (let i = 0; i < Math.max(n, fxEls.length); i++) {
+    const p = state.players[i];
+    const want = p ? getSliceFx(p) : null;
+    const F = fxEls[i];
+    if (F && (!want || F.id !== want || F.color !== p.color)) { F.el.remove(); fxEls[i] = null; }
+    if (want && !fxEls[i]) {
+      const def = SLICE_FX.find(f => f.id === want);
+      const el = document.createElement('div');
+      el.className = 'pfx pfx-' + def.id;
+      el.style.cssText = `--cl:${rgba(mixHex(p.color, '#ffffff', 0.45), 0.55)};--cd:${rgba(mixHex(p.color, '#000000', 0.4), 0.4)}`;
+      el.innerHTML = '<i></i>'.repeat(def.kids);
+      pieFx.appendChild(el);
+      fxEls[i] = { el, id: def.id, color: p.color, ring: !!def.ring, key: '', t: '', o: '' };
+    }
+  }
+  fxEls.length = n;
+}
+// Ebene aufs Stück zuschneiden und mit ihm bewegen (Auswahl-Pop, Einschläge …)
+function fxPlace(i, s, e, dx, dy, op) {
+  const F = fxEls[i];
+  if (!F) return;
+  const key = s.toFixed(2) + '|' + e.toFixed(2);
+  if (F.key !== key) {
+    F.key = key;
+    const outer = arc(s, e, R_OUT, R_IN);
+    const clip = F.ring ? `path(evenodd, '${outer} ${arc(s, e, R_OUT - 7, R_IN + 7, 16)}')` : `path('${outer}')`;
+    F.el.style.visibility = outer ? '' : 'hidden';
+    F.el.style.clipPath = clip;
+    F.el.style.webkitClipPath = clip;
+  }
+  const t = `scale(${pieScale.toFixed(4)}) translate(${dx.toFixed(2)}px,${dy.toFixed(2)}px)`;
+  if (F.t !== t) { F.t = t; F.el.style.transform = t; }
+  const o = op < 1 ? op.toFixed(3) : '';
+  if (F.o !== o) { F.o = o; F.el.style.opacity = o; }
+}
+function haptic(kind) {
+  try {
+    if (window.Flip7Native && Flip7Native.haptic) Flip7Native.haptic(kind);
+    else if (navigator.vibrate) navigator.vibrate(kind === 'long' ? 18 : 8);
+  } catch (e) {}
+}
+function fxBurst(i) {
+  if (!ANIM.on || !state.players[i]) return;
+  const q = sparkTarget(i, 0.5), col = state.players[i].color;
+  fxRing(q.x, q.y, col, 60, 0.5, 3);
+  fxEmbers(q.x, q.y, col, 12, 200, { dur: 0.5 });
+}
+function applySliceFx(i, id) {
+  const p = state.players[i];
+  setSliceFx(p, id);
+  const def = SLICE_FX.find(f => f.id === id);
+  showToast(def ? `${def.name} · ${p.name}` : `Effekt aus · ${p.name}`, p.color);
+  if (def) fxBurst(i);
+  syncSliceFx();
+  drawPie(performance.now());
+  saveLiveGame();
+}
+function toggleSliceFx(i) {
+  const p = state.players[i];
+  if (!p) return;
+  haptic('tap');
+  applySliceFx(i, getSliceFx(p) ? null : SLICE_FX[Math.floor(Math.random() * SLICE_FX.length)].id);
+}
+function cycleSliceFx(i) {
+  const p = state.players[i];
+  if (!p) return;
+  haptic('long');
+  const k = SLICE_FX.findIndex(f => f.id === getSliceFx(p));
+  applySliceFx(i, SLICE_FX[(k + 1) % SLICE_FX.length].id);
+}
+
+// ── Gesten auf der Torte ───────────────────────────────
+// Tippen = Spieler:in wählen · Doppeltippen = Effekt an/aus · lange drücken = nächster Effekt
+let press = null, pressTimer = null, lastTap = { i: -1, t: 0 };
+const sliceAt = e => {
+  const g = e.target && e.target.closest ? e.target.closest('.pie-slice') : null;
+  return g ? parseInt(g.getAttribute('data-i'), 10) : -1;
+};
+pieSvg.addEventListener('pointerdown', e => {
+  if (e.button > 0) return;
+  const i = sliceAt(e);
+  if (i < 0 || !state.players[i]) return;
+  press = { i, x: e.clientX, y: e.clientY, id: e.pointerId, long: false };
+  clearTimeout(pressTimer);
+  pressTimer = setTimeout(() => { if (press && press.i === i) { press.long = true; cycleSliceFx(i); } }, 550);
+});
+pieSvg.addEventListener('pointermove', e => {
+  if (press && e.pointerId === press.id && Math.hypot(e.clientX - press.x, e.clientY - press.y) > 24) {
+    clearTimeout(pressTimer);
+    press = null;
+  }
+});
+function endPress(e) {
+  clearTimeout(pressTimer);
+  const p = press;
+  press = null;
+  if (!p || e.pointerId !== p.id || p.long || e.type === 'pointercancel') return;
+  const now = performance.now();
+  if (lastTap.i === p.i && now - lastTap.t < 350) { lastTap = { i: -1, t: 0 }; toggleSliceFx(p.i); }
+  else { lastTap = { i: p.i, t: now }; selectPlayer(p.i); }
+}
+pieSvg.addEventListener('pointerup', endPress);
+pieSvg.addEventListener('pointercancel', endPress);
+pieSvg.addEventListener('contextmenu', e => e.preventDefault());
 
 // ── Pro Frame: Geometrie aus dem Animationszustand ────
 function drawPie(now) {
@@ -1846,15 +2083,19 @@ function drawPie(now) {
     }
     a.dx = dx; a.dy = dy;
     let tf = `translate(${dx.toFixed(2)} ${dy.toFixed(2)})`;
-    let op = 1;
+    let op = 1, landed = true;
     if (anim && pieIntro) {
       const lt = clamp((now - pieIntro.t0 - i * 45) / 600, 0, 1);
+      landed = lt >= 1;
       const sc = 0.25 + 0.75 * easeOutBack(lt), rot = -40 * (1 - easeOutCubic(lt));
       if (lt < 1) tf += ` rotate(${rot.toFixed(2)} 200 200) translate(200 200) scale(${sc.toFixed(3)}) translate(-200 -200)`;
       op = clamp(lt * 3, 0, 1);
     }
     setAttr(E.g, 'transform', tf);
     setAttr(E.g, 'opacity', op < 1 ? op.toFixed(3) : '1');
+    setAttr(E.tw, 'transform', tf);
+    setAttr(E.tw, 'opacity', op < 1 ? op.toFixed(3) : '1');
+    fxPlace(i, s, e, dx, dy, landed ? op : 0);   // Effekt erst nach dem Einflug zeigen
 
     const key = s.toFixed(2) + '|' + e.toFixed(2);
     if (E.key !== key) { E.key = key; E.track.setAttribute('d', arc(s, e, R_OUT, R_IN)); }
@@ -2079,6 +2320,7 @@ function sizePie() {
   const stage = $('pie-stage');
   stage.style.width = sz + 'px';
   stage.style.height = sz + 'px';
+  pieScale = sz / 400;
   pieCTM = null;
 }
 </script>
@@ -3437,7 +3679,7 @@ window.flip7Back = function () {
 // Cached die HTML beim ersten Laden → App funktioniert danach komplett offline.
 if ('serviceWorker' in navigator) {
   const swCode = `
-    const CACHE = 'flip7-v33';
+    const CACHE = 'flip7-v34';
     self.addEventListener('install', e => {
       e.waitUntil(
         caches.open(CACHE).then(c => c.addAll([self.location.href.replace(/\\/[^\\/]*$/, '') + '/']))
