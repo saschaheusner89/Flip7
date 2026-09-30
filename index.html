@@ -25,7 +25,7 @@
 
 <!-- iOS Home Screen Icon (SVG als Data-URI) -->
 <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='100' fill='%230f0e17'/><text x='256' y='310' text-anchor='middle' font-family='Arial Black,sans-serif' font-size='260' font-weight='900'><tspan fill='%23fffffe'>F</tspan><tspan fill='%23ff6b35'>7</tspan></text></svg>">
-<title>Flip 7 · Score v35</title>
+<title>Flip 7 · Score v36</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script>
@@ -868,6 +868,7 @@
   .fchip.active { color: #fff; font-weight: 700; }
 
   /* Kennzahlen */
+  .legacy-hint { margin: 0.35rem 1rem 0; font-family: 'DM Mono', monospace; font-size: 0.62rem; color: var(--muted); text-align: center; }
   .kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.6rem; margin: 0.8rem 1rem 0; }
   .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 0.7rem 0.5rem; text-align: center; min-width: 0; }
   .kpi-val { font-family: 'DM Mono', monospace; font-size: 1.35rem; font-weight: 500; line-height: 1.1; }
@@ -1092,6 +1093,7 @@
     <button class="fchip" data-days="0">Alles</button>
   </div>
 
+  <div class="legacy-hint" id="legacyHint" style="display:none"></div>
   <div class="kpis" id="sc-kpis"></div>
 
   <!-- Karte 1: Podium -->
@@ -3126,8 +3128,22 @@ function filterSessions(days) {
 }
 
 // Sammelt alle bekannten Spieler (Name→Farbe) aus allen Sessions
-function getPlayersFromSessions(sessions) {
+// Altbestand: aus der alten Version übernommene Summen (z. B. von Screenshots digitalisiert).
+// flip7_legacy = { until:'YYYY-MM-DD', games:N, players:[{name,color,games,points,gold,silver,bronze}],
+//                  days:{'YYYY-MM-DD':Anzahl}, record?:{name,score,color}, appliedMedals:{…} }
+function loadLegacy() {
+  try { const l = JSON.parse(localStorage.getItem('flip7_legacy')); return l && Array.isArray(l.players) ? l : null; }
+  catch (e) { return null; }
+}
+const fmtDM = d => d ? `${d.slice(8, 10)}.${d.slice(5, 7)}.` : '?';
+
+function getPlayersFromSessions(sessions, legacy = null) {
   const map = {}; // name → {color, totalScore, count, gold, silver, bronze}
+  if (legacy) legacy.players.forEach(p => {
+    const nk = normalizeName(p.name);
+    map[nk] = { name: p.name, color: p.color || '#9b9ab5', totalScore: +p.points || 0, count: +p.games || 0,
+                gold: +p.gold || 0, silver: +p.silver || 0, bronze: +p.bronze || 0 };
+  });
   sessions.forEach(s => {
     s.players.forEach(p => {
       const nk = normalizeName(p.name);
@@ -3185,17 +3201,22 @@ $('sc-legend').addEventListener('click', e => {
   if (!chip || !statsCache) return;
   const nk = chip.dataset.nk;
   hiddenLines.has(nk) ? hiddenLines.delete(nk) : hiddenLines.add(nk);
-  renderLineChart(statsCache.sessions, statsCache.players, false);
+  renderLineChart(statsCache.sessions, statsCache.players, false, statsCache.legacy);
 });
 
 function renderStats(animate = true) {
   const sessions = filterSessions(statsFilterDays);
-  const players  = getPlayersFromSessions(sessions);
-  statsCache = { sessions, players };
+  const L = loadLegacy();
+  const legacy = statsFilterDays === 0 ? L : null;   // Altbestand hat keine Einzeldaten → nur unter „Alles“
+  const players  = getPlayersFromSessions(sessions, legacy);
+  statsCache = { sessions, players, legacy };
   const A = animate && ANIM.on;
-  renderKpis(sessions, players, A);
+  const hint = $('legacyHint');
+  hint.style.display = L && !legacy ? '' : 'none';
+  if (L) hint.textContent = `Altbestand (bis ${fmtDM(L.until)}) zählt nur unter „Alles“`;
+  renderKpis(sessions, players, A, legacy);
   renderStatsPodium(players, A);
-  renderLineChart(sessions, players, A);
+  renderLineChart(sessions, players, A, legacy);
   renderMedalBars(players, A);
   renderAvgBars(players, A);
   renderHeatmap(loadSessions(), A); // Heatmap immer über alle Sessions
@@ -3206,12 +3227,13 @@ const shortName = (n, max = 9) => { const u = n.toUpperCase(); return u.length >
 const animAttr = (A, cls, d) => A ? ` class="${cls}" style="--d:${d.toFixed(3)}s"` : '';
 
 // ── Kennzahlen ────────────────────────────────────────
-function renderKpis(sessions, players, A) {
+function renderKpis(sessions, players, A, legacy = null) {
   const el = $('sc-kpis');
-  let best = null;
+  let best = legacy && legacy.record && legacy.record.score ? legacy.record : null;
   sessions.forEach(s => s.players.forEach(p => { if (!best || p.score > best.score) best = p; }));
+  const games = sessions.length + (legacy ? (+legacy.games || 0) : 0);
   const items = [
-    { v: sessions.length, l: sessions.length === 1 ? 'Spiel' : 'Spiele' },
+    { v: games, l: games === 1 ? 'Spiel' : 'Spiele' },
     { v: players.length, l: 'Spieler:innen' },
     { v: best ? best.score : '–', l: best ? `Rekord · ${best.name}` : 'Rekord', c: best ? best.color : null }
   ];
@@ -3236,6 +3258,7 @@ function collectBackup() {
 function summarize(data) {
   let games = 0;
   try { games = (JSON.parse(data.flip7_sessions || '[]') || []).length; } catch (e) {}
+  try { const L = JSON.parse(data.flip7_legacy || 'null'); if (L) games += +L.games || 0; } catch (e) {}
   const medalKeys = Object.keys(data).filter(k => k.startsWith('flip7_medals_'));
   let medals = 0;
   medalKeys.forEach(k => { try { const m = JSON.parse(data[k]) || {}; medals += (m.gold || 0) + (m.silver || 0) + (m.bronze || 0); } catch (e) {} });
@@ -3277,7 +3300,7 @@ function resetRestoreBtn() {
   clearTimeout(restoreTimer); restoreTimer = null;
   const b = $('restoreGo');
   b.classList.remove('confirm');
-  b.textContent = 'Laden';
+  b.textContent = restoreParsed && restoreParsed.type === 'legacy' ? 'Einpflegen' : 'Laden';
   b.disabled = !restoreParsed;
 }
 $('restoreBtn').onclick = () => {
@@ -3296,10 +3319,18 @@ $('restoreIn').addEventListener('input', () => {
   if (raw) {
     try {
       const b = JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1));
-      if (b && b.app === 'flip7' && b.data && typeof b.data === 'object' &&
+      if (b && b.app === 'flip7' && b.type === 'legacy' && b.legacy && Array.isArray(b.legacy.players) &&
+          b.legacy.players.every(p => p && typeof p.name === 'string' && p.name.trim())) restoreParsed = b;
+      else if (b && b.app === 'flip7' && b.data && typeof b.data === 'object' &&
           Object.keys(b.data).every(k => k.startsWith('flip7_') && typeof b.data[k] === 'string')) restoreParsed = b;
     } catch (e) {}
-    if (restoreParsed) {
+    if (restoreParsed && restoreParsed.type === 'legacy') {
+      const Lg = restoreParsed.legacy;
+      const medals = Lg.players.reduce((n, p) => n + (+p.gold || 0) + (+p.silver || 0) + (+p.bronze || 0), 0);
+      out.className = 'backup-sum';
+      out.innerHTML = `✓ Altbestand bis ${esc(fmtDM(Lg.until))}: ${+Lg.games || 0} Spiele · ${Lg.players.length} Personen mit ${medals} Medaillen` +
+        `<br>➕ Wird ergänzt – deine bisherigen Spiele bleiben` + (loadLegacy() ? ' (ersetzt den alten Altbestand)' : '');
+    } else if (restoreParsed) {
       const here = summarize(currentData());
       const date = restoreParsed.exported ? new Date(restoreParsed.exported).toLocaleDateString('de-DE') : '?';
       out.className = 'backup-sum' + (here.games || here.people ? ' warn' : '');
@@ -3321,6 +3352,16 @@ $('restoreGo').onclick = () => {
     restoreTimer = setTimeout(resetRestoreBtn, 3000);
     return;
   }
+  if (restoreParsed.type === 'legacy') {           // Altbestand: ergänzen statt ersetzen
+    mergeLegacy(restoreParsed);
+    restoreParsed = null;
+    resetRestoreBtn();
+    closeModal('restore-modal'); overlay.classList.remove('active');
+    renderNameInputs();
+    renderStats(true);
+    showToast('✓ Altbestand eingepflegt');
+    return;
+  }
   // 2. Tippen: vorhandene Daten ersetzen
   Object.keys(currentData()).forEach(k => localStorage.removeItem(k));
   Object.entries(restoreParsed.data).forEach(([k, v]) => localStorage.setItem(k, v));
@@ -3333,6 +3374,27 @@ $('restoreGo').onclick = () => {
   renderStats(true);
   showToast('✓ Daten geladen');
 };
+
+// Altbestand einpflegen: Medaillen-Zähler (Setup-Abzeichen) werden ergänzt. Ein früher
+// eingepflegter Altbestand wird vorher wieder abgezogen → mehrfaches Einpflegen zählt nie doppelt.
+function mergeLegacy(b) {
+  const prev = loadLegacy();
+  const prevM = (prev && prev.appliedMedals) || {};
+  const norm = o => Object.fromEntries(Object.entries(o || {}).map(([k, v]) => [normalizeName(k), v || {}]));
+  const newM = b.medals ? norm(b.medals) : Object.fromEntries(b.legacy.players.map(p =>
+    [normalizeName(p.name), { gold: +p.gold || 0, silver: +p.silver || 0, bronze: +p.bronze || 0 }]));
+  new Set([...Object.keys(prevM), ...Object.keys(newM)]).forEach(nk => {
+    const cur = getMedals(nk), a = prevM[nk] || {}, n = newM[nk] || {};
+    ['gold', 'silver', 'bronze'].forEach(t => { cur[t] = Math.max(0, (cur[t] || 0) - (+a[t] || 0) + (+n[t] || 0)); });
+    localStorage.setItem(`flip7_medals_${nk}`, JSON.stringify(cur));
+  });
+  // Farben pro Name merken (nur wenn noch keine gespeichert ist)
+  b.legacy.players.forEach(p => {
+    const nk = normalizeName(p.name);
+    if (/^#[0-9a-f]{6}$/i.test(p.color || '') && !localStorage.getItem(`flip7_color_name_${nk}`)) localStorage.setItem(`flip7_color_name_${nk}`, p.color);
+  });
+  localStorage.setItem('flip7_legacy', JSON.stringify({ ...b.legacy, appliedMedals: newM }));
+}
 
 // ── Karte 1: Podium (Top-3 nach Goldmedaillen) ───────
 function renderStatsPodium(players, A) {
@@ -3371,10 +3433,10 @@ function renderStatsPodium(players, A) {
 }
 
 // ── Karte 2: Kumuliertes Liniendiagramm ──────────────
-function renderLineChart(sessions, players, A) {
+function renderLineChart(sessions, players, A, legacy = null) {
   const el    = $('sc-linechart');
   const legEl = $('sc-legend');
-  if (!sessions.length || !players.length) {
+  if ((!sessions.length && !legacy) || !players.length) {
     el.innerHTML = '<div class="empty-stats">Keine Daten im Zeitraum</div>';
     legEl.innerHTML = '';
     return;
@@ -3384,6 +3446,9 @@ function renderLineChart(sessions, players, A) {
 
   // Datenpunkte aufbauen: für jeden Spieler kumulierte Punkte je Session
   const sorted = [...sessions].sort((a, b) => a.date.localeCompare(b.date));
+  // Altbestand als erster Punkt: die Linien starten bei den übernommenen Summen
+  if (legacy) sorted.unshift({ date: legacy.until || (sorted[0] ? sorted[0].date : localYMD()), legacy: true,
+    players: legacy.players.map(p => ({ name: p.name, score: +p.points || 0 })) });
   const cumul = {}, points = {};
   players.forEach(p => { const nk = normalizeName(p.name); cumul[nk] = 0; points[nk] = []; });
   sorted.forEach((s, si) => {
@@ -3415,11 +3480,12 @@ function renderLineChart(sessions, players, A) {
   });
   // X-Achse: Datum der ersten und letzten Session (TT.MM.)
   const fmtDate = d => `${d.slice(8, 10)}.${d.slice(5, 7)}.`;
+  const firstLbl = sorted[0].legacy ? `bis ${fmtDate(sorted[0].date)}` : fmtDate(sorted[0].date);
   if (sorted.length > 1) {
-    svg += `<text x="${PAD.left}" y="${H - 5}" text-anchor="start" font-family="DM Mono,monospace" font-size="9" fill="#7e7d9a">${fmtDate(sorted[0].date)}</text>`;
+    svg += `<text x="${PAD.left}" y="${H - 5}" text-anchor="start" font-family="DM Mono,monospace" font-size="9" fill="#7e7d9a">${firstLbl}</text>`;
     svg += `<text x="${PAD.left + IW}" y="${H - 5}" text-anchor="end" font-family="DM Mono,monospace" font-size="9" fill="#7e7d9a">${fmtDate(sorted[sorted.length - 1].date)}</text>`;
   } else {
-    svg += `<text x="${X(0)}" y="${H - 5}" text-anchor="middle" font-family="DM Mono,monospace" font-size="9" fill="#7e7d9a">${fmtDate(sorted[0].date)}</text>`;
+    svg += `<text x="${X(0)}" y="${H - 5}" text-anchor="middle" font-family="DM Mono,monospace" font-size="9" fill="#7e7d9a">${firstLbl}</text>`;
   }
 
   // Linien + Punkte pro Spieler
@@ -3439,7 +3505,8 @@ function renderLineChart(sessions, players, A) {
     pts.forEach((pt, j) => {
       const isLast = j === pts.length - 1;
       if (!showDots && !isLast) return;
-      svg += `<circle cx="${X(pt.si).toFixed(1)}" cy="${Y(pt.y).toFixed(1)}" r="${isLast ? 4 : 3.2}" fill="${p.color}" stroke="#1a1928" stroke-width="1.5"${animAttr(A, 'a-pop', d0 + 0.15 + (j / Math.max(1, pts.length - 1)) * 0.75)}/>`;
+      const old = sorted[pt.si].legacy;   // Altbestand: hohler Punkt
+      svg += `<circle cx="${X(pt.si).toFixed(1)}" cy="${Y(pt.y).toFixed(1)}" r="${isLast ? 4 : 3.2}" fill="${old ? '#1a1928' : p.color}" stroke="${old ? p.color : '#1a1928'}" stroke-width="${old ? 2 : 1.5}"${animAttr(A, 'a-pop', d0 + 0.15 + (j / Math.max(1, pts.length - 1)) * 0.75)}/>`;
     });
     const last = pts[pts.length - 1];
     ends.push({ x: X(last.si), y: Y(last.y), v: last.y, color: p.color });
@@ -3540,10 +3607,11 @@ function renderAvgBars(players, A) {
 function renderHeatmap(sessions, A) {
   const el = $('sc-heatmap');
   const sub = $('hm-sub');
-  if (!sessions.length) { el.innerHTML = '<div class="empty-stats">Keine Daten</div>'; sub.textContent = ''; return; }
-
   const counts = {};
   sessions.forEach(s => { counts[s.date] = (counts[s.date] || 0) + 1; });
+  const L = loadLegacy();
+  if (L && L.days) Object.entries(L.days).forEach(([d, n]) => { if (+n > 0) counts[d] = (counts[d] || 0) + (+n); });
+  if (!Object.keys(counts).length) { el.innerHTML = '<div class="empty-stats">Keine Daten</div>'; sub.textContent = ''; return; }
   const maxCount = Math.max(...Object.values(counts), 1);
 
   const SZ = 12, GAP = 3, LBL = 22;
@@ -3685,7 +3753,7 @@ window.flip7Back = function () {
 // Cached die HTML beim ersten Laden → App funktioniert danach komplett offline.
 if ('serviceWorker' in navigator) {
   const swCode = `
-    const CACHE = 'flip7-v35';
+    const CACHE = 'flip7-v36';
     self.addEventListener('install', e => {
       e.waitUntil(
         caches.open(CACHE).then(c => c.addAll([self.location.href.replace(/\\/[^\\/]*$/, '') + '/']))
