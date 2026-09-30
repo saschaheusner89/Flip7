@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<!-- Quelle für die App-Icons. Wird von icon/render.mjs mit Chromium gerendert:
+     #fg (Vordergrund, adaptiv), #bg (Hintergrund), #mono (Themed Icon), #legacy (altes Icon) -->
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  @font-face { font-family: 'SyneIcon'; font-weight: 400 800; src: url(../assets/fonts/8vIH7w4qzmVxm2BL9G78HEY.woff2) format('woff2'); }
+  html, body { margin: 0; padding: 0; background: transparent; }
+  .canvas { position: relative; width: 432px; height: 432px; overflow: hidden; }
+  .bg { position: absolute; inset: 0;
+        background: radial-gradient(circle at 50% 42%, #3a1f24 0%, #1a1426 38%, #0f0e17 70%); }
+  .bg::after { content: ''; position: absolute; inset: 0;
+        background: radial-gradient(circle at 30% 75%, rgba(77,191,184,.18), transparent 45%); }
+  .card { position: absolute; left: 50%; top: 50%; width: 132px; height: 178px; border-radius: 20px;
+          display: flex; align-items: center; justify-content: center;
+          font-family: 'SyneIcon', sans-serif; font-weight: 800; color: #fff; }
+  .back { background: linear-gradient(150deg, #7fe0d9, #4dbfb8 55%, #2f9a93);
+          transform: translate(-50%, -50%) translate(34px, -10px) rotate(14deg);
+          box-shadow: 0 10px 24px rgba(0,0,0,.45); }
+  .back::before { content: ''; position: absolute; inset: 12px; border-radius: 12px; border: 3px solid rgba(255,255,255,.35); }
+  .front { background: linear-gradient(150deg, #ffa066, #ff6b35 55%, #e24f1b);
+           transform: translate(-50%, -50%) translate(-18px, 6px) rotate(-8deg);
+           box-shadow: 0 14px 30px rgba(0,0,0,.55), inset 0 2px 0 rgba(255,255,255,.35);
+           font-size: 104px; line-height: 1; }
+  .front span { transform: translate(-3px, 5px); text-shadow: 0 4px 0 rgba(0,0,0,.18); }
+  /* Monochrom: nur die Silhouette (Android färbt sie selbst ein) */
+  .mono .back, .mono .front { background: #fff; box-shadow: none; }
+  .mono .back { opacity: .55; }
+  .mono .back::before { display: none; }
+  .mono .front span { color: #000; text-shadow: none; }
+  /* Legacy: abgerundetes Quadrat mit allem drin, etwas kleiner skaliert */
+  .legacy { border-radius: 96px; }
+  .legacy .cards { position: absolute; inset: 0; transform: scale(1.18); }
+  .fg .cards, .mono .cards { position: absolute; inset: 0; }
+</style>
+</head>
+<body>
+<div class="canvas" id="c"></div>
+<script>
+  const mode = location.hash.slice(1) || 'fg';
+  const c = document.getElementById('c');
+  c.className = 'canvas ' + mode;
+  const cards = '<div class="cards"><div class="card back"></div><div class="card front"><span>7</span></div></div>';
+  if (mode === 'bg') c.innerHTML = '<div class="bg"></div>';
+  else if (mode === 'legacy') c.innerHTML = '<div class="bg"></div>' + cards;
+  else c.innerHTML = cards;
+  // Monochrom: "7" wird schwarz gerendert und danach per Pillow transparent gemacht
+</script>
+</body>
+</html>

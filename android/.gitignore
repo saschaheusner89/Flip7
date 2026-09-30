@@ -1,0 +1,7 @@
+# Build-Ausgabe, heruntergeladene Werkzeuge und der Signaturschlüssel gehören nicht ins Git
+build/
+.tools/
+*.p12
+*.jks
+*.keystore
+icon/out/

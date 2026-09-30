@@ -3125,6 +3125,21 @@ window.addEventListener('resize', () => {
   }, 100);
 });
 
+// ── Android-Zurück-Taste (wird von der APK aufgerufen) ─
+// Schließt offene Fenster Schritt für Schritt. true = erledigt,
+// false = nichts offen → die App geht in den Hintergrund (Spiel bleibt).
+window.flip7Back = function () {
+  const cp = $('cp-sheet');
+  if (cp.classList.contains('open') && !cp.classList.contains('closing')) { $('cpCancel').click(); return true; }
+  if ($('history-panel').classList.contains('open') || document.querySelector('.modal-wrap.open:not(.closing)')) {
+    closeAllModals();
+    return true;
+  }
+  const st = $('stats-screen');
+  if (st.classList.contains('open') && !st.classList.contains('closing')) { closeStats(); return true; }
+  return false;
+};
+
 // ── Laufendes Spiel wiederherstellen ────────────────────
 // Läuft beim Laden: existiert ein gesichertes Spiel, direkt ins
 // Spiel springen statt zum Setup (überlebt Splitscreen-Reload).
