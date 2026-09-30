@@ -25,7 +25,7 @@
 
 <!-- iOS Home Screen Icon (SVG als Data-URI) -->
 <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='100' fill='%230f0e17'/><text x='256' y='310' text-anchor='middle' font-family='Arial Black,sans-serif' font-size='260' font-weight='900'><tspan fill='%23fffffe'>F</tspan><tspan fill='%23ff6b35'>7</tspan></text></svg>">
-<title>Flip 7 · Score v30</title>
+<title>Flip 7 · Score v31</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script>
@@ -514,6 +514,44 @@
     animation: shine 4.5s ease-in-out 2s infinite;
   }
   #add-btn:active { transform: scale(0.92); }
+
+  /* ===== LETZTES SPIEL (unter dem Spielbereich – wird beim Tippen von der Tastatur verdeckt) ===== */
+  #last-game {
+    position: fixed; left: 0; right: 0; top: var(--app-height); bottom: 0;
+    display: none; align-items: center; justify-content: center;
+    padding: 0.8rem 1rem calc(0.8rem + env(safe-area-inset-bottom, 0px));
+    z-index: 4; pointer-events: none; overflow: hidden;
+  }
+  body[data-screen="game"] #last-game { display: flex; }
+  @media (max-height: 380px) { body[data-screen="game"] #last-game { display: none; } }
+  .lg-card {
+    width: 100%; max-width: 320px;
+    background: rgba(26,25,40,.72); border: 1px solid var(--border); border-radius: 16px;
+    padding: 0.7rem 0.9rem 0.8rem;
+  }
+  .lg-card.anim { animation: fadeUp .6s var(--ease-out) .55s both; }
+  .lg-head {
+    font-family: 'DM Mono', monospace; font-size: 0.6rem; letter-spacing: 2px; text-transform: uppercase;
+    color: var(--muted); text-align: center; margin-bottom: 0.55rem;
+  }
+  .lg-podium { display: flex; align-items: flex-end; gap: 0.4rem; height: 88px; }
+  .lg-slot { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 2px; }
+  .lg-name { font-size: 0.64rem; font-weight: 800; text-transform: uppercase; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .lg-score { font-family: 'DM Mono', monospace; font-size: 0.56rem; color: var(--muted); }
+  .lg-medal { font-size: 1.05rem; line-height: 1; }
+  .lg-block {
+    width: 100%; border-radius: 6px 6px 0 0; transform-origin: bottom;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'DM Mono', monospace; font-size: 0.6rem; font-weight: 700; color: rgba(0,0,0,.5);
+    box-shadow: inset 0 2px 0 rgba(255,255,255,.35);
+  }
+  .lg-block.gold   { height: 30px; background: linear-gradient(180deg, #ffe07a, #f7c948 40%, #d9a520); }
+  .lg-block.silver { height: 21px; background: linear-gradient(180deg, #e3e8ef, #b8c0cc 45%, #939cab); }
+  .lg-block.bronze { height: 14px; background: linear-gradient(180deg, #e6a468, #cd7f32 45%, #a8621f); }
+  .lg-card.anim .lg-block { animation: rise .6s var(--spring) backwards; animation-delay: var(--d); }
+  .lg-card.anim .lg-medal { animation: medalDrop .7s var(--spring) backwards; animation-delay: calc(var(--d) + .15s); }
+  .lg-card.anim .lg-name, .lg-card.anim .lg-score { animation: fadeIn .45s ease-out backwards; animation-delay: calc(var(--d) + .25s); }
+  .lg-hint { font-family: 'DM Mono', monospace; font-size: 0.62rem; color: #5d5c78; text-align: center; line-height: 1.5; }
 </style>
 <style>
   /* ===== HISTORY PANEL ===== */
@@ -1018,6 +1056,9 @@
   </div>
 </div>
 
+<!-- Podium vom letzten Spiel (im Bereich, den die Tastatur beim Tippen verdeckt) -->
+<div id="last-game" aria-label="Letztes Spiel"></div>
+
 <!-- Panels / modals -->
 <div id="overlay"></div>
 <div id="history-panel">
@@ -1154,7 +1195,8 @@ function saveLiveGame() {
     localStorage.setItem(LIVE_KEY, JSON.stringify({
       players: state.players, history: state.history,
       schnell: !!state.schnell, ziel: state.ziel || 200,
-      activeIdx, startIdx: startPlayerIdx, confetti: [...confettiFired]
+      activeIdx, startIdx: startPlayerIdx, confetti: [...confettiFired],
+      lastGame: state.lastGame || null
     }));
   } catch (e) { /* Speicher voll o.ä. – Spiel läuft trotzdem weiter */ }
 }
@@ -2381,6 +2423,7 @@ function showGame(intro, instantSetupHide = false) {
   if (ANIM.on && intro) pieIntro = { t0: performance.now() };
   renderPie();
   startClock(); // Uhrzeit-Anzeige starten
+  renderLastGame(ANIM.on && intro);
   FX.kick();
 }
 
@@ -2403,6 +2446,7 @@ $('startBtn').onclick = () => {
   state.schnell = cb.checked;
   state.ziel = (cb.checked && !isNaN(zielVal) && zielVal > 0) ? zielVal : 200;
   state.history = [];
+  state.lastGame = snapshotLastGame(); // Podium vom vorigen Spiel für die Anzeige unten
   confettiFired.clear();
   activeIdx = null;
   showGame(true);
@@ -2593,6 +2637,8 @@ $('confirmReset').onclick = () => {
   state.players.forEach(p => p.score = 0); state.history = []; confettiFired.clear(); startPlayerIdx = 0;
   closeModal('reset-modal'); overlay.classList.remove('active');
   pieAnim.forEach(a => { a.wave = 4; a.flash = 0.5; });
+  state.lastGame = snapshotLastGame();
+  renderLastGame(true);
   renderPie(); showToast('Punkte zurückgesetzt');
   saveLiveGame();
   FX.kick();
@@ -3125,6 +3171,49 @@ window.addEventListener('resize', () => {
   }, 100);
 });
 
+// ── Podium vom letzten Spiel ────────────────────────────
+// Schnappschuss der zuletzt gespeicherten Siegerehrung (flip7_sessions),
+// wird beim Spielstart festgehalten und im Live-Spiel mitgespeichert.
+function snapshotLastGame() {
+  const all = loadSessions();
+  const s = all[all.length - 1];
+  if (!s || !Array.isArray(s.players)) return null;
+  const pick = m => s.players.filter(p => p.medal === m).map(p => ({ name: p.name, score: p.score, color: p.color }));
+  return { date: s.date, gold: pick('gold'), silver: pick('silver'), bronze: pick('bronze') };
+}
+function fmtDay(ymd) {
+  if (!ymd) return '';
+  const y = new Date(); y.setDate(y.getDate() - 1);
+  if (ymd === localYMD()) return 'heute';
+  if (ymd === localYMD(y)) return 'gestern';
+  const [Y, M, D] = ymd.split('-');
+  return `${['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'][new Date(+Y, +M - 1, +D).getDay()]} ${D}.${M}.`;
+}
+function renderLastGame(animate) {
+  const el = $('last-game');
+  const lg = state.lastGame;
+  const cls = 'lg-card' + (animate && ANIM.on ? ' anim' : '');
+  if (!lg || !(lg.gold.length || lg.silver.length || lg.bronze.length)) {
+    el.innerHTML = `<div class="${cls}"><div class="lg-head">Letztes Spiel</div>` +
+      `<div class="lg-hint">Noch keins gespeichert – nach der 🏅 Siegerehrung<br>steht hier das Podium</div></div>`;
+    return;
+  }
+  // Silber links, Gold Mitte, Bronze rechts; Gleichstand → Namen mit "&"
+  const slot = (type, emoji, lbl, d) => {
+    const ps = lg[type] || [];
+    if (!ps.length) return '<div class="lg-slot"></div>';
+    const names = ps.map(p => `<span style="color:${p.color}">${esc(p.name)}</span>`).join(' & ');
+    return `<div class="lg-slot" style="--d:${d}s">
+      <div class="lg-name">${names}</div>
+      <div class="lg-score">${ps[0].score} Pkt</div>
+      <div class="lg-medal">${emoji}</div>
+      <div class="lg-block ${type}">${lbl}</div>
+    </div>`;
+  };
+  el.innerHTML = `<div class="${cls}"><div class="lg-head">Letztes Spiel · ${fmtDay(lg.date)}</div>` +
+    `<div class="lg-podium">${slot('silver', '🥈', '2.', 0.85)}${slot('gold', '🥇', '1.', 1.0)}${slot('bronze', '🥉', '3.', 0.7)}</div></div>`;
+}
+
 // ── Android-Zurück-Taste (wird von der APK aufgerufen) ─
 // Schließt offene Fenster Schritt für Schritt. true = erledigt,
 // false = nichts offen → die App geht in den Hintergrund (Spiel bleibt).
@@ -3153,6 +3242,7 @@ window.flip7Back = function () {
   state.ziel    = saved.ziel || 200;
   (saved.confetti || []).forEach(i => confettiFired.add(i));
   if (Number.isInteger(saved.startIdx) && saved.startIdx < state.players.length) startPlayerIdx = saved.startIdx;
+  state.lastGame = saved.lastGame !== undefined ? saved.lastGame : snapshotLastGame();
   showGame(true, true);
   if (Number.isInteger(saved.activeIdx) && state.players[saved.activeIdx]) {
     selectPlayer(saved.activeIdx, false); // false = Tastatur nicht aufpoppen lassen
@@ -3165,7 +3255,7 @@ window.flip7Back = function () {
 // Cached die HTML beim ersten Laden → App funktioniert danach komplett offline.
 if ('serviceWorker' in navigator) {
   const swCode = `
-    const CACHE = 'flip7-v30';
+    const CACHE = 'flip7-v31';
     self.addEventListener('install', e => {
       e.waitUntil(
         caches.open(CACHE).then(c => c.addAll([self.location.href.replace(/\\/[^\\/]*$/, '') + '/']))
