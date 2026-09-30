@@ -3,7 +3,7 @@
 # Werkzeuge kommen von Maven Central bzw. GitHub (aapt2 steckt in apktool).
 #
 #   ./build.sh                    → build/flip7-v<VERSION>.apk
-#   VERSION_CODE=33 VERSION_NAME=33 KS_PASS=… ./build.sh
+#   VERSION_CODE=34 VERSION_NAME=34 KS_PASS=… ./build.sh
 #
 # WICHTIG: Updates lassen sich nur über die alte App installieren, wenn sie mit
 # DEMSELBEN Schlüssel signiert sind (KEYSTORE). Der Schlüssel gehört nicht ins Git.
@@ -13,8 +13,8 @@ TOOLS="${TOOLS:-$HERE/.tools}"
 OUT="$HERE/build"
 KEYSTORE="${KEYSTORE:-$HERE/flip7-release.p12}"   # nicht ins Git (Repo ist öffentlich)!
 KS_PASS="${KS_PASS:-}"
-VERSION_CODE="${VERSION_CODE:-32}"
-VERSION_NAME="${VERSION_NAME:-32}"
+VERSION_CODE="${VERSION_CODE:-33}"
+VERSION_NAME="${VERSION_NAME:-33}"
 MIN_SDK=24
 TARGET_SDK=35
 

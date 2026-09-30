@@ -10,6 +10,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowInsets;
 import android.view.WindowManager;
+import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
@@ -63,6 +64,7 @@ public class MainActivity extends Activity {
         s.setMediaPlaybackRequiresUserGesture(true);
 
         web.setWebViewClient(new AssetClient());
+        web.addJavascriptInterface(new NativeBridge(), "Flip7Native");   // "Teilen" für die Datensicherung
         root.addView(web, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         setContentView(root);
@@ -117,6 +119,26 @@ public class MainActivity extends Activity {
             web = null;
         }
         super.onDestroy();
+    }
+
+    /** Brücke für die Seite: öffnet das Android-Teilen-Menü (z. B. Datensicherung per WhatsApp/Mail an sich selbst). */
+    private class NativeBridge {
+        @JavascriptInterface
+        public void share(final String text) {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    Intent send = new Intent(Intent.ACTION_SEND);
+                    send.setType("text/plain");
+                    send.putExtra(Intent.EXTRA_SUBJECT, "Flip 7 – Datensicherung");
+                    send.putExtra(Intent.EXTRA_TEXT, text);
+                    try {
+                        startActivity(Intent.createChooser(send, "Sicherung teilen"));
+                    } catch (Exception ignored) {
+                    }
+                }
+            });
+        }
     }
 
     /** Liefert die App-Dateien (und die Google-Fonts) aus den Assets statt aus dem Netz. */

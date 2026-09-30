@@ -25,7 +25,7 @@
 
 <!-- iOS Home Screen Icon (SVG als Data-URI) -->
 <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='100' fill='%230f0e17'/><text x='256' y='310' text-anchor='middle' font-family='Arial Black,sans-serif' font-size='260' font-weight='900'><tspan fill='%23fffffe'>F</tspan><tspan fill='%23ff6b35'>7</tspan></text></svg>">
-<title>Flip 7 · Score v32</title>
+<title>Flip 7 · Score v33</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script>
@@ -841,6 +841,26 @@
   /* Letzter Abstand unten damit der Homeindikator nichts verdeckt */
   .stats-bottom-pad { height: calc(2rem + env(safe-area-inset-bottom, 0px)); }
 
+  /* ===== DATEN ÜBERTRAGEN (Sichern / Laden) ===== */
+  .backup-info { font-family: 'DM Mono', monospace; font-size: 0.66rem; color: var(--muted); line-height: 1.5; margin: -0.3rem 0 0.8rem; }
+  .backup-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
+  .backup-row .ghost-btn { margin-top: 0; color: var(--text); }
+  .backup-card { max-width: 340px; text-align: left; gap: 0.9rem; }
+  .backup-card h3 { text-align: center; }
+  .backup-card p { font-size: 0.8rem; line-height: 1.45; }
+  .backup-card textarea {
+    width: 100%; height: 92px; resize: none; background: var(--bg);
+    border: 1px solid var(--border); border-radius: 10px; color: var(--text);
+    font-family: 'DM Mono', monospace; font-size: 0.6rem; line-height: 1.35;
+    padding: 0.5rem; outline: none; word-break: break-all;
+  }
+  .backup-card textarea:focus { border-color: var(--accent); }
+  .backup-sum { font-family: 'DM Mono', monospace; font-size: 0.7rem; color: var(--good); line-height: 1.45; min-height: 1em; }
+  .backup-sum.warn { color: #ffb36b; }
+  .backup-sum.bad { color: var(--bad); }
+  #restoreGo:disabled { opacity: 0.35; }
+  #restoreGo.confirm { background: #e84040; }
+
   /* ===== COLOR-PICKER (Farbfeld + Farbton-Regler) ===== */
   .cp-wrap { position: fixed; inset: 0; z-index: 700; display: none; align-items: flex-end; justify-content: center; }
   .cp-wrap.open { display: flex; }
@@ -1003,6 +1023,16 @@
     <div class="heatmap-wrap chart"><div id="sc-heatmap"></div></div>
   </div>
 
+  <!-- Karte 6: Daten übertragen -->
+  <div class="stat-card" style="--i:5">
+    <div class="stat-card-title">💾 Daten übertragen <span class="sub">andere App / neues Handy</span></div>
+    <div class="backup-info">Sichert Statistik, Medaillen, Namen und Farben als Text – in der anderen App unter „Laden“ einfügen.</div>
+    <div class="backup-row">
+      <button class="ghost-btn rip" id="backupBtn">📤 Sichern</button>
+      <button class="ghost-btn rip" id="restoreBtn">📥 Laden</button>
+    </div>
+  </div>
+
   <div class="stats-bottom-pad"></div>
 </div>
 
@@ -1108,6 +1138,33 @@
       <button class="btn-confirm rip" id="confirmReset">Punkte auf 0</button>
     </div>
     <button class="btn-newgame" id="newGameBtn">🏁 Neues Spiel (zurück zum Start)</button>
+  </div>
+</div>
+
+<div id="backup-modal" class="modal-wrap">
+  <div class="modal-card backup-card">
+    <h3>📤 Daten sichern</h3>
+    <p>Diesen Text kopieren und in der anderen App unter <b>Statistik → Daten übertragen → Laden</b> einfügen.</p>
+    <textarea id="backupOut" readonly></textarea>
+    <div class="backup-sum" id="backupSum"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel rip" id="backupClose">Schließen</button>
+      <button class="btn-confirm rip" id="backupCopy">Kopieren</button>
+    </div>
+    <button class="btn-newgame" id="backupShare" style="display:none">📨 Teilen (z. B. an dich selbst)</button>
+  </div>
+</div>
+
+<div id="restore-modal" class="modal-wrap">
+  <div class="modal-card backup-card">
+    <h3>📥 Daten laden</h3>
+    <p>Gesicherten Text hier einfügen (lange drücken → Einfügen).</p>
+    <textarea id="restoreIn" placeholder='{"app":"flip7", …}'></textarea>
+    <div class="backup-sum" id="restoreSum"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel rip" id="restoreClose">Abbrechen</button>
+      <button class="btn-confirm rip" id="restoreGo" disabled>Laden</button>
+    </div>
   </div>
 </div>
 
@@ -1235,7 +1292,7 @@ function closeModal(id) {
 }
 function closeAllModals() {
   $('history-panel').classList.remove('open');
-  ['reset-modal', 'sieger-modal', 'add-player-modal'].forEach(closeModal);
+  ['reset-modal', 'sieger-modal', 'add-player-modal', 'backup-modal', 'restore-modal'].forEach(closeModal);
   overlay.classList.remove('active');
 }
 
@@ -2916,6 +2973,119 @@ function renderKpis(sessions, players, A) {
   if (A) el.querySelectorAll('.kpi-val').forEach((v, k) => countUp(v, items[k].v, 800, 200 + k * 90));
 }
 
+// ── Daten übertragen: Sichern / Laden ────────────────
+// Alle flip7_*-Einträge aus localStorage als JSON-Text. Nicht übertragen werden
+// das gerade laufende Spiel und die Animations-Einstellung (gerätebezogen).
+const BACKUP_SKIP = new Set(['flip7_live_game', 'flip7_anim_off']);
+function collectBackup() {
+  const data = {};
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith('flip7_') && !BACKUP_SKIP.has(k)) data[k] = localStorage.getItem(k);
+  }
+  return { app: 'flip7', format: 1, exported: new Date().toISOString(), data };
+}
+function summarize(data) {
+  let games = 0;
+  try { games = (JSON.parse(data.flip7_sessions || '[]') || []).length; } catch (e) {}
+  const medalKeys = Object.keys(data).filter(k => k.startsWith('flip7_medals_'));
+  let medals = 0;
+  medalKeys.forEach(k => { try { const m = JSON.parse(data[k]) || {}; medals += (m.gold || 0) + (m.silver || 0) + (m.bronze || 0); } catch (e) {} });
+  return { games, people: medalKeys.length, medals };
+}
+const sumText = x => `${x.games} ${x.games === 1 ? 'Spiel' : 'Spiele'} · ${x.people} ${x.people === 1 ? 'Person' : 'Personen'} mit ${x.medals} Medaillen`;
+function currentData() { return collectBackup().data; }
+
+$('backupBtn').onclick = () => {
+  const b = collectBackup();
+  $('backupOut').value = JSON.stringify(b);
+  $('backupSum').className = 'backup-sum';
+  $('backupSum').textContent = '✓ ' + sumText(summarize(b.data));
+  $('backupCopy').textContent = 'Kopieren';
+  // Teilen: in der Flip-7-APK über Android, sonst über den Browser (falls verfügbar)
+  $('backupShare').style.display = (window.Flip7Native || navigator.share) ? 'block' : 'none';
+  openModal('backup-modal');
+};
+$('backupClose').onclick = () => { closeModal('backup-modal'); overlay.classList.remove('active'); };
+$('backupCopy').onclick = async () => {
+  const ta = $('backupOut'), text = ta.value;
+  let ok = false;
+  try { await navigator.clipboard.writeText(text); ok = true; } catch (e) {}
+  if (!ok) {
+    try { ta.focus(); ta.select(); ta.setSelectionRange(0, text.length); ok = document.execCommand('copy'); } catch (e) {}
+  }
+  $('backupCopy').textContent = ok ? '✓ Kopiert' : 'Kopieren';
+  if (ok) showToast('In die Zwischenablage kopiert');
+  else { $('backupSum').className = 'backup-sum warn'; $('backupSum').textContent = 'Automatisch kopieren ging nicht – Text lange drücken → Alles auswählen → Kopieren'; }
+};
+$('backupShare').onclick = () => {
+  const text = $('backupOut').value;
+  if (window.Flip7Native) Flip7Native.share(text);
+  else if (navigator.share) navigator.share({ title: 'Flip 7 – Datensicherung', text }).catch(() => {});
+};
+
+let restoreParsed = null, restoreTimer = null;
+function resetRestoreBtn() {
+  clearTimeout(restoreTimer); restoreTimer = null;
+  const b = $('restoreGo');
+  b.classList.remove('confirm');
+  b.textContent = 'Laden';
+  b.disabled = !restoreParsed;
+}
+$('restoreBtn').onclick = () => {
+  $('restoreIn').value = '';
+  restoreParsed = null;
+  $('restoreSum').className = 'backup-sum';
+  $('restoreSum').textContent = '';
+  resetRestoreBtn();
+  openModal('restore-modal');
+};
+$('restoreClose').onclick = () => { closeModal('restore-modal'); overlay.classList.remove('active'); };
+$('restoreIn').addEventListener('input', () => {
+  const raw = $('restoreIn').value.trim();
+  const out = $('restoreSum');
+  restoreParsed = null;
+  if (raw) {
+    try {
+      const b = JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1));
+      if (b && b.app === 'flip7' && b.data && typeof b.data === 'object' &&
+          Object.keys(b.data).every(k => k.startsWith('flip7_') && typeof b.data[k] === 'string')) restoreParsed = b;
+    } catch (e) {}
+    if (restoreParsed) {
+      const here = summarize(currentData());
+      const date = restoreParsed.exported ? new Date(restoreParsed.exported).toLocaleDateString('de-DE') : '?';
+      out.className = 'backup-sum' + (here.games || here.people ? ' warn' : '');
+      out.innerHTML = `✓ Sicherung vom ${esc(date)}: ${esc(sumText(summarize(restoreParsed.data)))}` +
+        (here.games || here.people ? `<br>⚠ Ersetzt die Daten in dieser App (${esc(sumText(here))})` : '');
+    } else {
+      out.className = 'backup-sum bad';
+      out.textContent = 'Das ist keine Flip-7-Sicherung (Text vollständig eingefügt?)';
+    }
+  } else { out.className = 'backup-sum'; out.textContent = ''; }
+  resetRestoreBtn();
+});
+$('restoreGo').onclick = () => {
+  if (!restoreParsed) return;
+  const b = $('restoreGo');
+  if (!restoreTimer) {                           // 1. Tippen: nachfragen
+    b.classList.add('confirm');
+    b.textContent = '✓ Wirklich laden?';
+    restoreTimer = setTimeout(resetRestoreBtn, 3000);
+    return;
+  }
+  // 2. Tippen: vorhandene Daten ersetzen
+  Object.keys(currentData()).forEach(k => localStorage.removeItem(k));
+  Object.entries(restoreParsed.data).forEach(([k, v]) => localStorage.setItem(k, v));
+  const cnt = parseInt(localStorage.getItem('flip7_player_count'), 10);
+  if (cnt >= 2 && cnt <= 18) { numPlayers = cnt; playerCountEl.textContent = cnt; }
+  renderNameInputs();
+  restoreParsed = null;
+  resetRestoreBtn();
+  closeModal('restore-modal'); overlay.classList.remove('active');
+  renderStats(true);
+  showToast('✓ Daten geladen');
+};
+
 // ── Karte 1: Podium (Top-3 nach Goldmedaillen) ───────
 function renderStatsPodium(players, A) {
   const el = $('sc-podium');
@@ -3267,7 +3437,7 @@ window.flip7Back = function () {
 // Cached die HTML beim ersten Laden → App funktioniert danach komplett offline.
 if ('serviceWorker' in navigator) {
   const swCode = `
-    const CACHE = 'flip7-v32';
+    const CACHE = 'flip7-v33';
     self.addEventListener('install', e => {
       e.waitUntil(
         caches.open(CACHE).then(c => c.addAll([self.location.href.replace(/\\/[^\\/]*$/, '') + '/']))

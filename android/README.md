@@ -12,8 +12,8 @@ Die Hülle bringt gegenüber der reinen HTML:
 ## Bauen (ohne Android-SDK)
 
 ```bash
-KS_PASS='<passwort>' ./build.sh                       # → build/flip7-v32.apk
-VERSION_CODE=33 VERSION_NAME=33 KS_PASS='…' ./build.sh
+KS_PASS='<passwort>' ./build.sh                       # → build/flip7-v33.apk
+VERSION_CODE=34 VERSION_NAME=34 KS_PASS='…' ./build.sh
 ```
 
 Die Werkzeuge lädt `build.sh` selbst von Maven Central bzw. GitHub nach `.tools/`:
