@@ -14,7 +14,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
-<title>Flip 7 · Score v40</title>
+<title>Flip 7 · Score v41</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script>
@@ -1170,7 +1170,7 @@
   #numpad { display: none; }
   html.ios #numpad {
     display: grid; position: fixed; left: 0; right: 0; top: calc(var(--app-height) + var(--strip-h)); bottom: 0; z-index: 6;
-    grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(4, 1fr); gap: 8px;
+    grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(4, 1fr) auto; gap: 8px;
     padding: 10px 12px calc(10px + var(--safe-b));
     background: linear-gradient(180deg, var(--bg-2), var(--bg) 70%);
     border-top: 1px solid var(--border);
@@ -1195,6 +1195,13 @@
   .np-key.down { transform: scale(.93); background: var(--surface-2); border-color: var(--border-hi); }
   .np-key svg { width: 28px; height: 28px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
   .np-del { color: var(--muted); }
+  /* Unterste Zeile: Ziffernblock wegklappen (darunter Podium und „Darstellung“), Tipp auf eine Spieler:in holt ihn zurück */
+  .np-hide {
+    grid-column: 1 / -1; height: 40px; gap: 6px; border-radius: 12px; background: none; border-color: transparent;
+    color: var(--muted); font-family: 'DM Mono', monospace; font-size: 0.72rem; letter-spacing: 1.5px; text-transform: uppercase;
+  }
+  .np-hide svg { width: 18px; height: 18px; }
+  .np-hide.down { background: var(--surface); border-color: var(--border); }
   .np-enter, .np-enter.down { background: var(--pc); border-color: transparent; color: #fff; box-shadow: 0 8px 22px -10px var(--pc); }
   .np-enter.down { filter: brightness(1.18); }
 
@@ -3323,7 +3330,8 @@ function buildNumpad() {
   el.innerHTML = [1, 2, 3, 4, 5, 6, 7, 8, 9].map(d => key(d, d)).join('') +
     key('del', '<svg viewBox="0 0 24 24"><path d="M9 5h10.5A1.5 1.5 0 0 1 21 6.5v11a1.5 1.5 0 0 1-1.5 1.5H9l-6-7z"/><path d="M12.5 9.5l5 5M17.5 9.5l-5 5"/></svg>', ' np-del', 'Löschen') +
     key(0, 0) +
-    key('enter', '<svg viewBox="0 0 24 24"><path d="M20 5v7a3 3 0 0 1-3 3H5"/><path d="M9 11l-4 4 4 4"/></svg>', ' np-enter', 'Eintragen');
+    key('enter', '<svg viewBox="0 0 24 24"><path d="M20 5v7a3 3 0 0 1-3 3H5"/><path d="M9 11l-4 4 4 4"/></svg>', ' np-enter', 'Eintragen') +
+    key('hide', '<svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>ausblenden', ' np-hide', 'Ziffernblock ausblenden');
   document.body.appendChild(el);
   const up = e => { const b = e.target.closest && e.target.closest('.np-key'); if (b) b.classList.remove('down'); };
   el.addEventListener('pointerdown', e => { const b = e.target.closest('.np-key'); if (b) b.classList.add('down'); });
@@ -3351,6 +3359,7 @@ function buildNumpad() {
 function padKey(k, src) {
   if (activeIdx === null) return;
   haptic('tick');
+  if (k === 'hide') { padHidden = true; syncPad(); return; }   // wie Wischen nach unten
   if (k === 'enter') { commitScore(false, src || numpad.querySelector('.np-enter')); return; }
   let v = deltaInput.value;
   if (k === 'del') v = v.slice(0, -1);
