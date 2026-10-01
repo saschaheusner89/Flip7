@@ -5,11 +5,13 @@ Schlanke WebView-Hülle um `../index.html`. Die Seite läuft komplett offline au
 
 Die Hülle bringt gegenüber der reinen HTML:
 
+- Vollbild: Status- und Navigationsleiste sind aus (Wischen vom Rand holt sie kurz zurück), frei bleibt nur die Kamera-Aussparung; im Splitscreen bleiben die Leisten
 - Display bleibt an
 - kein Neuladen bei Splitscreen/Drehen
 - Zurück-Taste schließt erst offene Fenster (`window.flip7Back`)
 - „Teilen“ für die Datensicherung (`Flip7Native.share`)
 - Tastatur zurückholen: Wurde sie weggewischt, bringt sie ein Tipp auf eine Spieler:in wieder (`Flip7Native.keyboard`)
+- Tastaturhöhe an die Seite melden (`window.flip7Keyboard`), damit die Balken bei „Torte + Balken“ genau bis zur Tastatur reichen
 
 ## Damit Updates die Statistik behalten – die 4 Regeln
 

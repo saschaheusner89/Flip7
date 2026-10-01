@@ -3,7 +3,7 @@
 //   die neueste index.html geholt – sie gilt ab dem nächsten Start, nie mitten im Spiel.
 //   Für ein Update der Seite muss hier nichts geändert werden.
 // • Schriften: die Kopien aus android/assets/fonts, genau wie in der APK.
-const CACHE = 'flip7-v39';
+const CACHE = 'flip7-v40';
 const FONTS = 'android/assets/fonts/';
 const CORE = [
   './',
