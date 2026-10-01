@@ -14,7 +14,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
-<title>Flip 7 · Score v39</title>
+<title>Flip 7 · Score v40</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script>
@@ -52,8 +52,12 @@
     --radius: 18px;
     --topbar: 52px;
     --inputbar: 68px;
-    /* The whole game UI lives in 57vh → keyboard takes the rest */
-    --app-height: 57vh;
+    /* The whole game UI lives in 57vh → keyboard takes the rest.
+       Torte + Balken: --strip-h = Balken unter der Eingabeleiste, --game-cut = so viel gibt die Torte
+       dafür ab, wenn bis zur Tastatur sonst zu wenig Platz wäre (beides setzt applyViewLayout) */
+    --strip-h: 0px;
+    --game-cut: 0px;
+    --app-height: calc(57vh - var(--game-cut));
     --pie-height: calc(var(--app-height) - var(--topbar) - var(--inputbar));
     --spring: cubic-bezier(.34, 1.56, .64, 1);
     --ease-out: cubic-bezier(.22, 1, .36, 1);
@@ -618,15 +622,16 @@
   }
   #add-btn:active { transform: scale(0.92); }
 
-  /* ===== LETZTES SPIEL (unter dem Spielbereich – wird beim Tippen von der Tastatur verdeckt) ===== */
+  /* ===== LETZTES SPIEL + DARSTELLUNG (unter dem Spielbereich – wird beim Tippen von der Tastatur verdeckt) ===== */
   #last-game {
-    position: fixed; left: 0; right: 0; top: var(--app-height); bottom: 0;
-    display: none; align-items: center; justify-content: center;
+    position: fixed; left: 0; right: 0; top: calc(var(--app-height) + var(--strip-h)); bottom: 0;
+    display: none; flex-direction: column; align-items: center; justify-content: center; gap: 0.8rem;
     padding: 0.8rem 1rem calc(0.8rem + env(safe-area-inset-bottom, 0px));
     z-index: 4; pointer-events: none; overflow: hidden;
   }
   body[data-screen="game"] #last-game { display: flex; }
   @media (max-height: 380px) { body[data-screen="game"] #last-game { display: none; } }
+  #lg-podium { flex: 1; min-height: 0; width: 100%; display: flex; align-items: center; justify-content: center; }
   .lg-card {
     width: 100%; max-width: 320px;
     background: rgba(26,25,40,.72); border: 1px solid var(--border); border-radius: 16px;
@@ -655,6 +660,116 @@
   .lg-card.anim .lg-medal { animation: medalDrop .7s var(--spring) backwards; animation-delay: calc(var(--d) + .15s); }
   .lg-card.anim .lg-name, .lg-card.anim .lg-score { animation: fadeIn .45s ease-out backwards; animation-delay: calc(var(--d) + .25s); }
   .lg-hint { font-family: 'DM Mono', monospace; font-size: 0.62rem; color: #5d5c78; text-align: center; line-height: 1.5; }
+
+  /* Schalter „Darstellung“ (4 gleich breite Felder, Indikator gleitet zur Auswahl) */
+  .view-switch { flex-shrink: 0; width: 100%; max-width: 360px; pointer-events: auto; }
+  .vs-head {
+    font-family: 'DM Mono', monospace; font-size: 0.6rem; letter-spacing: 2px; text-transform: uppercase;
+    color: var(--muted); text-align: center; margin-bottom: 0.45rem;
+  }
+  .vseg {
+    position: relative; display: grid; grid-template-columns: repeat(4, 1fr); padding: 4px;
+    background: rgba(26,25,40,.72); border: 1px solid var(--border); border-radius: 14px;
+  }
+  .vseg-ind {
+    position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc((100% - 8px) / 4);
+    border-radius: 10px; background: linear-gradient(135deg, #ff8a4d, var(--accent));
+    box-shadow: 0 4px 14px -4px rgba(255,107,53,.8);
+    transform: translateX(calc(var(--k, 0) * 100%));
+    transition: transform .45s var(--spring);
+  }
+  .vbtn {
+    position: relative; z-index: 1; min-width: 0; background: none; border: none; cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 0.5rem 0.15rem 0.45rem;
+    color: var(--muted); font-family: 'DM Mono', monospace; font-size: 0.58rem; line-height: 1.15; text-align: center;
+    transition: color .25s;
+  }
+  .vbtn svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .vbtn.active { color: #fff; font-weight: 700; }
+  .vbtn:active svg { transform: scale(.88); }
+
+  /* ===== DARSTELLUNG: BALKEN =====
+     Balkendiagramm: ersetzt die Torte, Zeilen von oben nach unten nach Punkten.
+     Torte + Balken: Säulen unter der Eingabeleiste, von links nach rechts nach Punkten.
+     Plätze wechseln per top/left-Übergang; Füllung und Zahl laufen im selben Takt wie die Torte (drawBars). */
+  #bar-chart { display: none; position: relative; width: 100%; height: 100%; touch-action: manipulation; }
+  #bar-chart .float-label { z-index: 2; pointer-events: none; }
+  body[data-view="bars"] #pie-stage { display: none; }
+  body[data-view="bars"] #bar-chart { display: block; }
+  .bc-row {
+    position: absolute; left: 0; right: 0; height: var(--slot);
+    display: flex; align-items: center; gap: 6px; padding-right: 4px; cursor: pointer;
+    transition: top .6s var(--spring);
+  }
+  .bc-row.enter { animation: barInX .5s var(--ease-out) backwards; animation-delay: var(--d, 0s); }
+  @keyframes barInX { from { opacity: 0; transform: translateX(-28px); } }
+  /* Startspieler:in-Pfeil (Tipp in diese Spalte: Startspieler:in wählen bzw. weiterreichen) */
+  .bc-start { flex: 0 0 20px; align-self: stretch; display: flex; align-items: center; justify-content: center; }
+  .bc-row.is-start .bc-start::before {
+    content: ''; border-left: 10px solid var(--c); border-top: 7px solid transparent; border-bottom: 7px solid transparent;
+    filter: drop-shadow(0 0 4px var(--c)); animation: arrowBobX 1.3s ease-in-out infinite alternate;
+  }
+  @keyframes arrowBobX { from { transform: translateX(-3px); } to { transform: translateX(2px); } }
+  .bc-track {
+    position: relative; flex: 1; min-width: 0; height: 72%; border-radius: 9px; overflow: hidden;
+    background: var(--ct); transition: box-shadow .3s;
+  }
+  .bc-track::after { content: ''; position: absolute; inset: 0; background: #ff4040; opacity: var(--fl, 0); pointer-events: none; }
+  .bc-fill {
+    position: absolute; left: 0; top: 0; bottom: 0; width: 0; border-radius: 9px; opacity: .85;
+    background: linear-gradient(180deg, rgba(255,255,255,.2), rgba(255,255,255,0) 55%, rgba(0,0,0,.14)), var(--c);
+    transition: opacity .3s;
+  }
+  .bc-row.active .bc-fill { opacity: 1; }
+  .bc-row.active .bc-track { box-shadow: 0 0 0 2px var(--c), 0 0 18px -2px var(--c); }
+  .bc-name {
+    position: absolute; left: 10px; right: 8px; top: 50%; transform: translateY(-50%);
+    font-weight: 700; font-size: clamp(9px, calc(var(--slot) * .3), 15px); letter-spacing: 0.8px; text-transform: uppercase;
+    color: #fff; text-shadow: 0 1px 2px #0f0e17, 0 0 3px #0f0e17, 0 0 6px rgba(15,14,23,.6);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none;
+  }
+  .bc-val {
+    flex: 0 0 3.1em; text-align: right; font-family: 'DM Mono', monospace; font-weight: 500;
+    font-size: clamp(10px, calc(var(--slot) * .36), 19px); transform-origin: right center;
+  }
+  .bc-medal { flex: 0 0 1.5em; text-align: center; font-size: clamp(9px, calc(var(--slot) * .32), 17px); line-height: 1; }
+  .bc-medal.pop { animation: medalPop .6s var(--spring); }
+  .bc-medal.cry { animation: cry 1.2s ease-in-out infinite; }
+
+  #bar-strip {
+    display: none; position: fixed; left: 0; right: 0; top: var(--app-height); height: var(--strip-h); z-index: 5;
+    padding: 6px 10px 5px; overflow: hidden;
+    background: linear-gradient(180deg, rgba(26,25,40,.6), rgba(15,14,23,.35));
+    border-bottom: 1px solid var(--border);
+    -webkit-user-select: none; user-select: none; touch-action: manipulation;
+  }
+  body[data-screen="game"][data-view="pie-bars"] #bar-strip { display: block; }
+  #bar-strip-in { position: relative; width: 100%; height: 100%; }
+  .bs-col {
+    position: absolute; top: 0; bottom: 0; width: var(--slot);
+    display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 0 3px; cursor: pointer;
+    transition: left .6s var(--spring);
+  }
+  .bs-col.enter { animation: barInY .45s var(--ease-out) backwards; animation-delay: var(--d, 0s); }
+  @keyframes barInY { from { opacity: 0; transform: translateY(12px); } }
+  .bs-val { font-family: 'DM Mono', monospace; font-weight: 500; font-size: 0.7rem; line-height: 1; transform-origin: center bottom; }
+  .bs-track {
+    position: relative; flex: 1; min-height: 0; width: 100%; max-width: 38px;
+    border-radius: 6px 6px 3px 3px; overflow: hidden; background: var(--ct); transition: box-shadow .3s;
+  }
+  .bs-track::after { content: ''; position: absolute; inset: 0; background: #ff4040; opacity: var(--fl, 0); pointer-events: none; }
+  .bs-fill {
+    position: absolute; left: 0; right: 0; bottom: 0; height: 0; opacity: .85;
+    background: linear-gradient(90deg, rgba(255,255,255,.22), rgba(255,255,255,0) 60%, rgba(0,0,0,.12)), var(--c);
+    transition: opacity .3s;
+  }
+  .bs-col.active .bs-fill { opacity: 1; }
+  .bs-col.active .bs-track { box-shadow: 0 0 0 2px var(--c), 0 0 14px -2px var(--c); }
+  .bs-name {
+    max-width: 100%; font-size: 0.5rem; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; line-height: 1.1;
+    color: rgba(255,255,255,.85); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .bs-col.active .bs-name { color: var(--c); }
 </style>
 <style>
   /* ===== HISTORY PANEL ===== */
@@ -1054,7 +1169,7 @@
   /* Ziffernblock im Tastatur-Bereich: fährt hoch, sobald eine Spieler:in gewählt ist, und bleibt */
   #numpad { display: none; }
   html.ios #numpad {
-    display: grid; position: fixed; left: 0; right: 0; top: var(--app-height); bottom: 0; z-index: 6;
+    display: grid; position: fixed; left: 0; right: 0; top: calc(var(--app-height) + var(--strip-h)); bottom: 0; z-index: 6;
     grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(4, 1fr); gap: 8px;
     padding: 10px 12px calc(10px + var(--safe-b));
     background: linear-gradient(180deg, var(--bg-2), var(--bg) 70%);
@@ -1064,6 +1179,11 @@
     touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
   }
   html.ios body[data-screen="game"].pad-on #numpad { transform: none; visibility: visible; transition: transform .34s var(--ease-out); }
+  /* Griff: nach unten wischen klappt den Ziffernblock weg (darunter: Podium und Darstellung) */
+  html.ios #numpad::before {
+    content: ''; position: absolute; top: 3px; left: 50%; width: 36px; height: 4px; margin-left: -18px;
+    border-radius: 2px; background: var(--border-hi);
+  }
   .np-key {
     position: relative; overflow: hidden; min-height: 0;
     display: flex; align-items: center; justify-content: center;
@@ -1261,6 +1381,7 @@
       <div id="pie-gloss"></div>
       <div id="pie-labels"></div>
     </div>
+    <div id="bar-chart" aria-label="Balkendiagramm"></div>
   </div>
 
   <div id="input-bar">
@@ -1275,8 +1396,31 @@
   </div>
 </div>
 
-<!-- Podium vom letzten Spiel (im Bereich, den die Tastatur beim Tippen verdeckt) -->
-<div id="last-game" aria-label="Letztes Spiel"></div>
+<!-- Torte + Balken: Säulen zwischen Eingabeleiste und Tastatur -->
+<div id="bar-strip" aria-label="Punkte als Balken"><div id="bar-strip-in"></div></div>
+
+<!-- Im Bereich, den die Tastatur beim Tippen verdeckt: Podium vom letzten Spiel + Schalter „Darstellung“ -->
+<div id="last-game">
+  <div id="lg-podium" aria-label="Letztes Spiel"></div>
+  <div class="view-switch">
+    <div class="vs-head" id="viewHead">Darstellung</div>
+    <div class="vseg" id="viewSeg" role="radiogroup" aria-labelledby="viewHead">
+      <div class="vseg-ind"></div>
+      <button type="button" class="vbtn" data-view="pie" role="radio">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3v9l6.4 6.4M12 12l-8.7 2.4"/></svg>Torte
+      </button>
+      <button type="button" class="vbtn" data-view="sorted" role="radio">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 5v8l5.7 5.7M12 13l-7.6 2.4"/><path d="M15.8 1.6l2.6 1.9-2.6 1.9" /><path d="M8 3.5h10"/></svg>Torte sortiert
+      </button>
+      <button type="button" class="vbtn" data-view="pie-bars" role="radio">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="6"/><path d="M12 2v6l4.2 4.2"/><path d="M4 22v-3M9.3 22v-5M14.7 22v-2M20 22v-4"/></svg>Torte+Balken
+      </button>
+      <button type="button" class="vbtn" data-view="bars" role="radio">
+        <svg viewBox="0 0 24 24" style="stroke-width:3"><path d="M4 5h16M4 10h12M4 15h8.5M4 20h5"/></svg>Balken&shy;diagramm
+      </button>
+    </div>
+  </div>
+</div>
 
 <!-- Panels / modals -->
 <div id="overlay"></div>
@@ -1773,6 +1917,15 @@ let centerFlipT0 = -1;
 let prevMedal = [];
 let arrowG = null, arrowPoly = null, centerG = null;
 let pieCTM = null, pieWasActive = false;
+let barEls = [];       // pro Spieler: DOM-Referenzen der Balken (Balkendiagramm bzw. Säulen unter der Eingabe)
+let barKey = '', barGeo = { slot: 0, off: 0 };
+
+// ── Darstellung: Torte · Torte sortiert · Torte + Balken · Balkendiagramm (Schalter hinter der Tastatur) ──
+const VIEWS = ['pie', 'sorted', 'pie-bars', 'bars'];
+const VIEW_NAMES = { pie: 'Torte', sorted: 'Torte sortiert', 'pie-bars': 'Torte + Balken', bars: 'Balkendiagramm' };
+const VIEW = { mode: 'pie' };
+try { const v = localStorage.getItem('flip7_view'); if (VIEWS.includes(v)) VIEW.mode = v; } catch (e) {}
+document.body.dataset.view = VIEW.mode;
 
 const MAX_SCORE = () => state.ziel || 200;
 const r1 = v => v.toFixed(1);
@@ -1843,7 +1996,8 @@ function ensurePieAnim() {
 function resetPieAnim() {
   pieAnim = state.players.map(p => newAnim(p.score));
   inflight = state.players.map(() => 0);
-  prevMedal = []; arrowShown = null; layoutAnim = null; pieIntro = null;
+  prevMedal = []; arrowShown = null; layoutAnim = null; pieIntro = null; pieOrder = [];
+  barKey = '';   // Balken neu aufbauen (mit Einflug)
 }
 // Alles sofort auf Endstand (z. B. wenn Animationen ausgeschaltet werden)
 function pieSnapAll() {
@@ -1853,14 +2007,39 @@ function pieSnapAll() {
   if (state.players.length) drawPie(performance.now());
 }
 
+// ── Reihenfolge ───────────────────────────────────────
+// Plätze nach Punkten (Gleichstand → Sitzreihenfolge). Punkte, die noch als Funken unterwegs sind,
+// zählen erst beim Einschlag – die Plätze tauschen also, wenn die Füllung angekommen ist.
+const shownScores = () => state.players.map((p, i) => p.score - (inflight[i] || 0));
+function rankPositions() {
+  const v = shownScores();
+  const pos = [];
+  v.map((_, i) => i).sort((a, b) => v[b] - v[a] || a - b).forEach((pi, k) => { pos[pi] = k; });
+  return pos;
+}
+// Torte sortiert: Position jedes Stücks (0 = ab 12 Uhr, dann im Uhrzeigersinn). Sonst Sitzreihenfolge.
+let pieOrder = [];
+const slicePos = i => pieOrder[i] ?? i;
+function syncPieOrder(now) {
+  const n = state.players.length;
+  const want = VIEW.mode === 'sorted' ? rankPositions() : state.players.map((_, i) => i);
+  if (pieOrder.length === n && want.every((p, i) => p === pieOrder[i])) return false;
+  const slide = ANIM.on && pieOrder.length === n && sliceEls.length > 0;   // Stücke gleiten auf ihren neuen Platz
+  const from = slide ? state.players.map((_, i) => sliceAngles(i, now)) : null;
+  pieOrder = want;
+  if (slide) layoutAnim = { from, t0: now, dur: 650 };
+  return true;
+}
+
 // ── Geometrie ─────────────────────────────────────────
-function targetAngles(i, n) { const d = 360 / n; return { s: i * d, e: (i + 1) * d }; }
+function targetAngles(i, n) { const d = 360 / n, k = slicePos(i); return { s: k * d, e: (k + 1) * d }; }
 function sliceAngles(i, now) {
   const T = targetAngles(i, state.players.length);
   if (!layoutAnim || !ANIM.on) return T;
   const k = easeOutCubic(clamp((now - layoutAnim.t0) / layoutAnim.dur, 0, 1));
   const F = layoutAnim.from[i] || { s: 360, e: 360 };
-  return { s: lerp(F.s, T.s, k), e: lerp(F.e, T.e, k) };
+  const off = Math.round((F.s - T.s) / 360) * 360;   // beim Umsortieren den kürzeren Weg rundherum
+  return { s: lerp(F.s, T.s + off, k), e: lerp(F.e, T.e + off, k) };
 }
 function arrowTargetAngle(now) {
   if (!state.players.length) return 0;
@@ -1876,8 +2055,14 @@ function pieToScreen(x, y) {
   if (!m) return { x: 0, y: 0 };
   return { x: m.a * x + m.c * y + m.e, y: m.b * x + m.d * y + m.f };
 }
-// Punkt auf der aktuellen Füll-Oberfläche eines Stücks (Bildschirmkoordinaten)
+// Punkt auf der aktuellen Füll-Oberfläche eines Stücks (Bildschirmkoordinaten).
+// Balkendiagramm: vorne am Balken.
 function sparkTarget(i, frac) {
+  const B = VIEW.mode === 'bars' && barEls[i];
+  if (B) {
+    const r = B.fill.getBoundingClientRect();
+    return { x: r.right, y: r.top + r.height * (0.15 + 0.7 * frac), nx: 1, ny: 0 };
+  }
   const { s, e } = sliceAngles(i, performance.now());
   const a = pieAnim[i] || {};
   const ang = s + (e - s) * frac;
@@ -1887,20 +2072,50 @@ function sparkTarget(i, frac) {
   return { x: p.x, y: p.y, nx: Math.cos(rad), ny: Math.sin(rad) };
 }
 
+// ── Medaillen & 😭 (Torte und Balken) ──────────────────
+// Medaillen: Top-3-Punktestände (nur > 0), Gleichstand teilt sich die Medaille.
+// Rein kosmetisch – die echte Medaillen-Statistik vergibt openSiegerehrung().
+const MEDAL_EMOJI = ['🥇', '🥈', '🥉'];
+function topScores() {
+  return [...new Set(state.players.map(p => p.score).filter(s => s > 0))].sort((a, b) => b - a).slice(0, 3);
+}
+// 😭 erscheint wenn: dieser Spieler hat 0 Punkte UND alle anderen haben ≥50% des Ziels
+function isCrying(i) {
+  const half = MAX_SCORE() * 0.5;
+  return state.players.length > 1 && state.players[i].score === 0 &&
+    state.players.every((op, oi) => oi === i || op.score >= half);
+}
+
+// Startspieler:in festlegen (Mitte der Torte: die nächste; Balkendiagramm: Tipp auf den Pfeil-Streifen)
+function setStartPlayer(idx) {
+  startPlayerIdx = idx;
+  centerFlipT0 = performance.now();
+  renderPie();
+  FX.kick();
+  const sp = state.players[startPlayerIdx];
+  showToast(`Startspieler:in: ${sp.name}`, sp.color);
+  saveLiveGame();
+}
+
 // ── Aufbau ────────────────────────────────────────────
 function renderPie() {
   ensurePieAnim();
+  syncPieOrder(performance.now());
+  renderBars();
   pieSvg.innerHTML = '';
   pieText.innerHTML = '';
   sliceEls = [];
   const n = state.players.length;
   if (!n) return;
+  if (VIEW.mode === 'bars') {   // Balkendiagramm statt Torte
+    arrowG = centerG = null;
+    drawPie(performance.now());
+    updateAmbientColor();
+    return;
+  }
   const maxScore = Math.max(...state.players.map(p => p.score));
   const hasWinner = maxScore > 0;
-  // Medaillen: Top-3-Punktestände (nur > 0), Gleichstand teilt sich die Medaille.
-  // Rein kosmetisch – die echte Medaillen-Statistik vergibt openSiegerehrung().
-  const MEDAL_EMOJI = ['🥇', '🥈', '🥉'];
-  const topScores = [...new Set(state.players.map(p => p.score).filter(s => s > 0))].sort((a, b) => b - a).slice(0, 3);
+  const tops = topScores();
 
   const defs = svgEl('defs');
   const f = svgEl('filter', { id: 'glow', x: '-25%', y: '-25%', width: '150%', height: '150%' });
@@ -1920,7 +2135,6 @@ function renderPie() {
   const sf = n<=3?30 : n<=4?26 : n<=5?22 : n<=6?19 : n<=8?15 : n<=10?12 : n<=13?10 : 8;
   const nf = n<=3?18 : n<=4?16 : n<=5?14 : n<=6?12 : n<=8?10 : n<=10?8 : n<=13?7 : 6;
   const gap = sf * 0.68;
-  const half = MAX_SCORE() * 0.5;
 
   state.players.forEach((p, i) => {
     const isWinner = hasWinner && p.score === maxScore;
@@ -1948,7 +2162,7 @@ function renderPie() {
     nt.textContent = p.name.toUpperCase().slice(0, 10);
     tg.append(st, nt);
 
-    const medalRank = topScores.indexOf(p.score);
+    const medalRank = tops.indexOf(p.score);
     if (medalRank >= 0) {
       const medalSize = n<=3?22 : n<=4?18 : n<=5?15 : n<=8?13 : n<=12?10 : 8;
       const mg = svgEl('g', { transform: `translate(0,${gap * 2.2})` });
@@ -1959,9 +2173,7 @@ function renderPie() {
     }
     prevMedal[i] = medalRank;
 
-    // 😭 erscheint wenn: dieser Spieler hat 0 Punkte UND alle anderen haben ≥50% des Ziels
-    const othersAllAtHalf = state.players.every((op, oi) => oi === i || op.score >= half);
-    if (p.score === 0 && othersAllAtHalf && n > 1) {
+    if (isCrying(i)) {
       const crySize = n<=3?20 : n<=4?17 : n<=5?14 : n<=8?12 : n<=12?10 : 8;
       const cg = svgEl('g', { transform: `translate(0,${gap * 2.2})` });
       const cry = svgEl('text', { x: 0, y: 0, 'text-anchor': 'middle', 'dominant-baseline': 'middle', 'font-size': crySize, stroke: '#0f0e17', 'stroke-width': '3', 'paint-order': 'stroke', class: 'cry-wobble' });
@@ -1994,15 +2206,7 @@ function renderPie() {
 
   // Invisible tap target over center to advance start player
   const centerTap = svgEl('circle', { cx: CX, cy: CY, r: R_IN - 5, fill: 'transparent', cursor: 'pointer' });
-  const advance = () => {
-    startPlayerIdx = (startPlayerIdx + 1) % state.players.length;
-    centerFlipT0 = performance.now();
-    renderPie();
-    FX.kick();
-    const sp = state.players[startPlayerIdx];
-    showToast(`Startspieler:in: ${sp.name}`, sp.color);
-    saveLiveGame();
-  };
+  const advance = () => setStartPlayer((startPlayerIdx + 1) % state.players.length);
   centerTap.addEventListener('click', advance);
   centerTap.addEventListener('touchend', e => { e.preventDefault(); e.stopPropagation(); advance(); });
   pieSvg.appendChild(centerTap);
@@ -2171,6 +2375,8 @@ pieSvg.addEventListener('touchend', e => e.preventDefault(), { passive: false })
 
 // ── Pro Frame: Geometrie aus dem Animationszustand ────
 function drawPie(now) {
+  drawBars(now);
+  drawChip();
   const n = state.players.length;
   if (!n || !sliceEls.length) return;
   const anim = ANIM.on;
@@ -2254,19 +2460,21 @@ function drawPie(now) {
     if (anim && centerFlipT0 >= 0) sx = Math.cos(clamp((now - centerFlipT0) / 520, 0, 1) * Math.PI * 2);
     setAttr(centerG, 'transform', sx === 1 ? 'translate(0 0)' : `translate(200 0) scale(${sx.toFixed(3)} 1) translate(-200 0)`);
   }
-  // Chip zählt synchron mit der Torte mit
-  if (activeIdx !== null && state.players[activeIdx]) {
-    const v = String(Math.round(anim && pieAnim[activeIdx] ? pieAnim[activeIdx].num : state.players[activeIdx].score));
-    if (chipScore.textContent !== v) chipScore.textContent = v;
-  }
+}
+// Chip zählt synchron mit der Torte (bzw. den Balken) mit
+function drawChip() {
+  if (activeIdx === null || !state.players[activeIdx]) return;
+  const v = String(Math.round(ANIM.on && pieAnim[activeIdx] ? pieAnim[activeIdx].num : state.players[activeIdx].score));
+  if (chipScore.textContent !== v) chipScore.textContent = v;
 }
 
 // ── Physik-Schritt (läuft im FX-Loop) ─────────────────
 function pieStep(dt, now) {
   pieCTM = null;
-  if (!ANIM.on || !state.players.length || !sliceEls.length) return false;
+  if (!ANIM.on || !state.players.length || !(sliceEls.length || barEls.length)) return false;
   let active = false;
   const n = state.players.length;
+  if (VIEW.mode === 'sorted' && syncPieOrder(now)) active = true;   // Funken eingeschlagen → Stücke tauschen
   for (let i = 0; i < n; i++) {
     const a = pieAnim[i];
     if (!a) continue;
@@ -2370,16 +2578,25 @@ function bustFx(i, src) {
 }
 function spawnLabel(i, text, color, big) {
   if (!ANIM.on) return;
-  const stage = $('pie-stage');
-  const sc = stage.clientWidth / 400;
-  const { s, e } = sliceAngles(i, performance.now());
-  const pt = polar((s + e) / 2, R_IN + (R_OUT - R_IN) * 0.62);
-  const a = pieAnim[i] || {};
+  let x, y, host;
+  const B = VIEW.mode === 'bars' && barEls[i];
+  if (B) {   // Balkendiagramm: neben dem Balkenende
+    host = $('bar-chart');
+    const hr = host.getBoundingClientRect(), fr = B.fill.getBoundingClientRect();
+    x = fr.right - hr.left + 26; y = fr.top + fr.height / 2 - hr.top;
+  } else {
+    host = $('pie-labels');
+    const sc = $('pie-stage').clientWidth / 400;
+    const { s, e } = sliceAngles(i, performance.now());
+    const pt = polar((s + e) / 2, R_IN + (R_OUT - R_IN) * 0.62);
+    const a = pieAnim[i] || {};
+    x = (pt.x + (a.dx || 0)) * sc; y = (pt.y + (a.dy || 0)) * sc;
+  }
   const el = document.createElement('div');
   el.className = 'float-label' + (big ? ' big' : '');
-  el.style.cssText = `--c:${color};left:${((pt.x + (a.dx || 0)) * sc).toFixed(1)}px;top:${((pt.y + (a.dy || 0)) * sc).toFixed(1)}px`;
+  el.style.cssText = `--c:${color};left:${x.toFixed(1)}px;top:${y.toFixed(1)}px`;
   el.textContent = text;
-  $('pie-labels').appendChild(el);
+  host.appendChild(el);
   setTimeout(() => el.remove(), 1150);
 }
 
@@ -2392,7 +2609,7 @@ function updateHalo(force) {
   if (!S || !state.players.length) return;
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const px = Math.round(S * 1.3 * dpr * 0.5);   // halbe Auflösung reicht – ist eh unscharf
-  const key = state.players.map(p => p.color).join() + '|' + px;
+  const key = state.players.map(p => p.color).join() + '|' + pieOrder.join() + '|' + px;
   if (!force && key === haloKey) return;
   haloKey = key;
   cv.width = cv.height = px;
@@ -2402,7 +2619,8 @@ function updateHalo(force) {
   ctx.filter = `blur(${Math.max(4, Math.round(18 * sc))}px)`;
   const n = state.players.length;
   state.players.forEach((p, i) => {
-    const s = (i * 360 / n - 90) * Math.PI / 180, e = ((i + 1) * 360 / n - 90) * Math.PI / 180;
+    const T = targetAngles(i, n);
+    const s = (T.s - 90) * Math.PI / 180, e = (T.e - 90) * Math.PI / 180;
     ctx.beginPath(); ctx.moveTo(c, c); ctx.arc(c, c, R_OUT * sc * 1.08, s, e); ctx.closePath();
     ctx.fillStyle = p.color; ctx.fill();
   });
@@ -2421,6 +2639,126 @@ function updateAmbientColor() {
   }
   document.documentElement.style.setProperty('--glow1', col);
 }
+
+// ══════════════════════════════════════════════════════
+// BALKEN: Balkendiagramm (Zeilen von oben nach unten) bzw.
+// Säulen unter der Eingabeleiste (von links nach rechts),
+// jeweils nach Punkten sortiert. Füllung, Zahl, Wackeln und
+// Aufblitzen kommen aus demselben Animationszustand wie die
+// Torte (pieAnim) – laufen also im Gleichtakt mit den Funken.
+// ══════════════════════════════════════════════════════
+function barHost() {
+  return VIEW.mode === 'bars' ? $('bar-chart') : VIEW.mode === 'pie-bars' ? $('bar-strip-in') : null;
+}
+function renderBars() {
+  const host = barHost(), rows = VIEW.mode === 'bars';
+  const key = host ? VIEW.mode + '|' + state.players.map(p => p.name + p.color).join('|') : '';
+  if (key !== barKey) {
+    barKey = key;
+    $('bar-chart').querySelectorAll('.bc-row').forEach(el => el.remove());
+    $('bar-strip-in').innerHTML = '';
+    barEls = [];
+    if (!host) return;
+    barEls = state.players.map((p, i) => {
+      const el = document.createElement('div');
+      el.className = rows ? 'bc-row' : 'bs-col';
+      el.dataset.i = i;
+      el.style.cssText = `--c:${p.color};--ct:${rgba(p.color, 0.15)}`;
+      el.innerHTML = rows
+        ? `<span class="bc-start"></span><span class="bc-track"><span class="bc-fill"></span><span class="bc-name">${esc(p.name)}</span></span><span class="bc-val"></span><span class="bc-medal"></span>`
+        : `<span class="bs-val"></span><span class="bs-track"><span class="bs-fill"></span></span><span class="bs-name">${esc(p.name)}</span>`;
+      const q = c => el.querySelector('.' + (rows ? 'bc-' : 'bs-') + c);
+      return { el, rows, track: q('track'), fill: q('fill'), val: q('val'), medal: rows ? q('medal') : null, pos: -1, medalTxt: '' };
+    });
+    layoutBars();   // Plätze vor dem Einhängen setzen → nichts rutscht von oben herein
+    if (ANIM.on) barEls.forEach(B => { B.el.classList.add('enter'); B.el.style.setProperty('--d', (B.pos * 0.045).toFixed(3) + 's'); });
+    barEls.forEach(B => host.appendChild(B.el));
+  } else if (host) layoutBars();
+  if (!host) return;
+  barEls.forEach((B, i) => {
+    B.el.classList.toggle('active', i === activeIdx);
+    if (B.rows) B.el.classList.toggle('is-start', i === startPlayerIdx);
+  });
+  drawBars(performance.now());
+}
+// Größe der Plätze aus dem verfügbaren Raum (Zeilen höchstens 58 px, Säulen höchstens 72 px breit, mittig)
+function layoutBars() {
+  const host = barHost();
+  if (!host || !barEls.length) return;
+  const rows = VIEW.mode === 'bars', n = barEls.length;
+  const size = rows ? host.clientHeight : host.clientWidth;
+  const slot = Math.max(1, Math.min(size / n, rows ? 58 : 72));
+  barGeo = { slot, off: (size - slot * n) / 2 };
+  host.style.setProperty('--slot', slot.toFixed(2) + 'px');
+  const pos = rankPositions();
+  barEls.forEach((B, i) => placeBar(B, pos[i]));
+}
+function placeBar(B, pos) {
+  B.pos = pos;
+  B.el.style[B.rows ? 'top' : 'left'] = (barGeo.off + pos * barGeo.slot).toFixed(1) + 'px';
+}
+// Pro Frame (aus drawPie): Plätze, Füllung, Zahl, Effekte
+function drawBars(now) {
+  if (!barEls.length) return;
+  const anim = ANIM.on, MAX = MAX_SCORE();
+  const pos = rankPositions();
+  // Medaillen wie in der Torte, aber erst wenn die Funken eingeschlagen sind (zusammen mit dem Platzwechsel)
+  const shown = shownScores();
+  const tops = [...new Set(shown.filter(s => s > 0))].sort((a, b) => b - a).slice(0, 3);
+  barEls.forEach((B, i) => {
+    const a = pieAnim[i], p = state.players[i];
+    if (!a || !p) return;
+    if (B.pos !== pos[i]) placeBar(B, pos[i]);   // Platzwechsel gleitet per CSS-Übergang
+    if (B.medal) {
+      const rank = tops.indexOf(shown[i]);
+      const m = rank >= 0 ? MEDAL_EMOJI[rank] : isCrying(i) ? '😭' : '';
+      if (B.medalTxt !== m) {
+        B.medalTxt = m;
+        B.medal.textContent = m;
+        B.medal.classList.toggle('cry', m === '😭');
+        if (m && m !== '😭') retrigger(B.medal, 'pop'); else B.medal.classList.remove('pop');
+      }
+    }
+    const num = anim ? a.num : p.score;
+    const r = (clamp((anim ? a.fill : p.score) / MAX, 0, 1) * 100).toFixed(2) + '%';
+    if (B.r !== r) { B.r = r; B.fill.style[B.rows ? 'width' : 'height'] = r; }
+    const v = String(Math.round(num));
+    if (B.v !== v) { B.v = v; B.val.textContent = v; B.val.style.color = num < 0 ? '#ff6b6b' : ''; }
+    const fl = anim ? a.flash : 0;
+    const flv = fl > 0.05 ? (0.6 * fl).toFixed(3) : num < 0 ? '0.38' : '0';
+    if (B.fl !== flv) { B.fl = flv; B.track.style.setProperty('--fl', flv); }
+    const sh = anim && a.shake > 0 ? Math.sin(now * 0.075) * 5 * a.shake : 0;
+    const tf = sh ? `translateX(${sh.toFixed(2)}px)` : '';
+    if (B.tf !== tf) { B.tf = tf; B.track.style.transform = tf; }
+    const ps = anim ? a.pulse * 0.3 : 0;
+    const vs = ps > 0.005 ? `scale(${(1 + ps).toFixed(3)})` : '';
+    if (B.vs !== vs) { B.vs = vs; B.val.style.transform = vs; }
+  });
+}
+// Antippen = Spieler:in wählen. Balkendiagramm: der Pfeil-Streifen links legt die Startspieler:in fest
+// (Tipp auf den Pfeil reicht ihn weiter – wie die Mitte der Torte).
+function barTaps(host) {
+  let down = null;
+  host.addEventListener('pointerdown', e => {
+    if (e.button > 0) return;
+    const el = e.target.closest('[data-i]');
+    down = el ? { i: +el.dataset.i, x: e.clientX, y: e.clientY, id: e.pointerId, start: !!e.target.closest('.bc-start') } : null;
+  });
+  const up = e => {
+    const d = down;
+    down = null;
+    if (!d || e.type === 'pointercancel' || e.pointerId !== d.id || !state.players[d.i] ||
+        Math.hypot(e.clientX - d.x, e.clientY - d.y) > 24) return;
+    if (!d.start) selectPlayer(d.i);
+    else setStartPlayer(d.i === startPlayerIdx ? (d.i + 1) % state.players.length : d.i);
+  };
+  host.addEventListener('pointerup', up);
+  host.addEventListener('pointercancel', up);
+  // Tastatur bleibt offen: ohne Maus-Ersatzereignisse nach dem Tippen (wie bei der Torte)
+  host.addEventListener('touchend', e => e.preventDefault(), { passive: false });
+}
+barTaps($('bar-chart'));
+barTaps($('bar-strip'));
 
 // ── Pie sizing ─────────────────────────────────────────
 function sizePie() {
@@ -2942,13 +3280,14 @@ function selectPlayer(idx, focus = true) {
 
 addBtn.addEventListener('click', () => commitScore(false, addBtn));
 deltaInput.addEventListener('keydown', e => { if (e.key === 'Enter') commitScore(false, deltaInput); });
-// Tastatur bleibt offen: Tippen oder langes Drücken irgendwo im Spielfeld (Torte, ADD/SUB, Chip, Uhr, Podium …)
-// nimmt dem Eingabefeld nie den Fokus. Nur die Knöpfe oben rechts öffnen Fenster und dürfen die Tastatur schließen.
+// Tastatur bleibt offen: Tippen oder langes Drücken irgendwo im Spielfeld (Torte, Balken, ADD/SUB, Chip, Uhr,
+// Podium, Darstellung …) nimmt dem Eingabefeld nie den Fokus. Nur die Knöpfe oben rechts öffnen Fenster und
+// dürfen die Tastatur schließen.
 function keepsFocus(e) {
   if (document.activeElement !== deltaInput) return false;
   const t = e.target;
   if (t === document.body || t === document.documentElement) return true;   // Hintergrund, z. B. unter dem Podium
-  return !!(t.closest && t.closest('#game') && !t.closest('.bar-actions, input, textarea, select'));
+  return !!(t.closest && t.closest('#game, #bar-strip, #last-game') && !t.closest('.bar-actions, input, textarea, select'));
 }
 // Finger: schon beim Aufsetzen abfangen – sonst verschiebt Android beim langen Drücken den Fokus
 document.addEventListener('pointerdown', e => { if (e.pointerType !== 'mouse' && keepsFocus(e)) e.preventDefault(); }, true);
@@ -2958,7 +3297,7 @@ document.addEventListener('mousedown', e => { if (keepsFocus(e)) e.preventDefaul
 // Tastatur zeigen. Hat das Feld den Fokus schon (Tastatur z. B. per Zurück-Geste weggewischt),
 // bewirkt focus() nichts – dann holt die App (APK) die Tastatur nativ zurück.
 function showKeyboard() {
-  if (IOS_PAD) { syncPad(); return; }      // iPhone: Ziffernblock statt Tastatur
+  if (IOS_PAD) { padHidden = false; syncPad(); return; }      // iPhone: Ziffernblock statt Tastatur
   const had = document.activeElement === deltaInput;
   deltaInput.focus();
   if (had && window.Flip7Native && Flip7Native.keyboard) { try { Flip7Native.keyboard(); } catch (e) {} }
@@ -2969,6 +3308,7 @@ function showKeyboard() {
 // Auf iOS tippt man die Punkte deshalb in einen eigenen Ziffernblock im Tastatur-Bereich.
 // Das Punktefeld ist dort nur Anzeige und bekommt nie den Fokus.
 const IOS_PAD = document.documentElement.classList.contains('ios');
+let padHidden = false;     // nach unten weggewischt (wie die Android-Tastatur per Zurück-Geste)
 const numpad = IOS_PAD ? buildNumpad() : null;
 function buildNumpad() {
   deltaInput.readOnly = true;
@@ -2990,7 +3330,22 @@ function buildNumpad() {
   el.addEventListener('pointerup', up);
   el.addEventListener('pointercancel', up);
   el.addEventListener('pointerout', up);
-  el.addEventListener('click', e => { const b = e.target.closest('.np-key'); if (b) padKey(b.dataset.k, b); });
+  // Nach unten wischen klappt den Ziffernblock weg – darunter liegen Podium und „Darstellung“.
+  // Ein Tipp auf eine Spieler:in holt ihn zurück. Die Taste unter dem Finger zählt dann nicht.
+  let swipe = null, swiped = false;
+  el.addEventListener('pointerdown', e => { swipe = { x: e.clientX, y: e.clientY, id: e.pointerId }; swiped = false; }, true);
+  el.addEventListener('pointerup', e => {
+    const s = swipe;
+    swipe = null;
+    if (!s || e.pointerId !== s.id) return;
+    const dy = e.clientY - s.y;
+    if (dy > 50 && Math.abs(e.clientX - s.x) < dy) { swiped = true; padHidden = true; syncPad(); }
+  }, true);
+  el.addEventListener('click', e => {
+    if (swiped) { swiped = false; return; }
+    const b = e.target.closest('.np-key');
+    if (b) padKey(b.dataset.k, b);
+  });
   return el;
 }
 function padKey(k, src) {
@@ -3004,7 +3359,7 @@ function padKey(k, src) {
 }
 // Ziffernblock ist da, solange eine Spieler:in gewählt ist (wie die Tastatur in der Android-App)
 function syncPad() {
-  if (IOS_PAD) document.body.classList.toggle('pad-on', activeIdx !== null);
+  if (IOS_PAD) document.body.classList.toggle('pad-on', activeIdx !== null && !padHidden);
 }
 if (IOS_PAD) {
   // Hardware-Tastatur (z. B. am iPad) tippt ebenfalls in den Ziffernblock
@@ -3292,6 +3647,81 @@ requestWakeLock();
     try { localStorage.setItem('flip7_ios_hint_off', '1'); } catch (e) {}
   };
 })();
+</script>
+
+<script>
+// ══════════════════════════════════════════════════════
+// DARSTELLUNG umschalten (Schalter unter dem Podium, also
+// hinter der Tastatur) + Platz für die Säulen bei Torte + Balken
+// ══════════════════════════════════════════════════════
+// Die App meldet die Höhe der Ziffern-Tastatur (flip7Keyboard) → die Säulen füllen genau den Platz zwischen
+// Eingabeleiste und Tastatur; ist er zu knapp, gibt die Torte ein paar Pixel ab. Ohne Meldung (Browser,
+// iPhone mit eigenem Ziffernblock – der rückt einfach nach unten) gilt eine feste Höhe.
+const STRIP = { min: 56, max: 150, def: 64, maxCut: 60 };
+const KB = { h: 0 };
+try { KB.h = parseInt(localStorage.getItem('flip7_kb'), 10) || 0; } catch (e) {}
+function applyViewLayout() {
+  let strip = 0, cut = 0;
+  if (VIEW.mode === 'pie-bars') {
+    strip = STRIP.def;
+    if (KB.h > 0 && !IOS_PAD) {
+      const gap = Math.floor(window.innerHeight * 0.43 - KB.h);   // unter den 57vh des Spielfelds bis zur Tastatur
+      if (gap >= STRIP.min) strip = Math.min(gap, STRIP.max);
+      else if (STRIP.min - gap <= STRIP.maxCut) { strip = STRIP.min; cut = STRIP.min - gap; }
+    }
+  }
+  const st = document.documentElement.style;
+  st.setProperty('--strip-h', strip + 'px');
+  st.setProperty('--game-cut', cut + 'px');
+}
+function relayoutGame() {
+  applyViewLayout();
+  if (document.body.dataset.screen !== 'game' || !state.players.length) return;
+  sizePie();
+  renderPie();
+  FX.kick();
+}
+// Aufruf aus der App (MainActivity), sobald die Tastatur steht
+let kbT = null;
+window.flip7Keyboard = function (h) {
+  clearTimeout(kbT);
+  kbT = setTimeout(() => {
+    h = Math.round(h);
+    // Nur die Ziffern-Tastatur im Spiel zählt (die Buchstaben-Tastatur der Namensfelder ist höher)
+    if (!(h > 80) || document.body.dataset.screen !== 'game' || document.activeElement !== deltaInput) return;
+    if (Math.abs(h - KB.h) < 4) return;
+    KB.h = h;
+    try { localStorage.setItem('flip7_kb', String(h)); } catch (e) {}
+    if (VIEW.mode === 'pie-bars') relayoutGame();
+  }, 300);
+};
+
+function syncViewSwitch() {
+  const k = Math.max(0, VIEWS.indexOf(VIEW.mode));
+  document.querySelectorAll('.vbtn').forEach((b, j) => {
+    b.classList.toggle('active', j === k);
+    b.setAttribute('aria-checked', j === k ? 'true' : 'false');
+  });
+  $('viewSeg').style.setProperty('--k', k);
+}
+function setView(mode) {
+  if (!VIEWS.includes(mode) || mode === VIEW.mode) return;
+  const fromBars = VIEW.mode === 'bars';
+  VIEW.mode = mode;
+  try { localStorage.setItem('flip7_view', mode); } catch (e) {}
+  document.body.dataset.view = mode;
+  syncViewSwitch();
+  haptic('tap');
+  if (ANIM.on && fromBars) pieIntro = { t0: performance.now() };   // Torte fliegt wieder ein
+  relayoutGame();
+  showToast(`Darstellung: ${VIEW_NAMES[mode]}`);
+}
+$('viewSeg').addEventListener('click', e => {
+  const b = e.target.closest('.vbtn');
+  if (b) setView(b.dataset.view);
+});
+syncViewSwitch();
+applyViewLayout();
 </script>
 
 <script>
@@ -3871,6 +4301,7 @@ let resizeT = null;
 window.addEventListener('resize', () => {
   clearTimeout(resizeT);
   resizeT = setTimeout(() => {
+    applyViewLayout();
     if (document.body.dataset.screen === 'game' && state.players.length) { sizePie(); renderPie(); }
     if ($('stats-screen').classList.contains('open')) renderStats(false);
   }, 100);
@@ -3895,7 +4326,7 @@ function fmtDay(ymd) {
   return `${['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'][new Date(+Y, +M - 1, +D).getDay()]} ${D}.${M}.`;
 }
 function renderLastGame(animate) {
-  const el = $('last-game');
+  const el = $('lg-podium');
   const lg = state.lastGame;
   const cls = 'lg-card' + (animate && ANIM.on ? ' anim' : '');
   if (!lg || !(lg.gold.length || lg.silver.length || lg.bronze.length)) {
