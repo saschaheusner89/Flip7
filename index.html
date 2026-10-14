@@ -14,7 +14,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
-<title>Flip 7 · Score v41</title>
+<title>Flip 7 · Score v42</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script>
@@ -375,6 +375,7 @@
 
   /* Pie area */
   #pie-wrap {
+    position: relative;
     flex: 1;
     display: flex; align-items: center; justify-content: center;
     padding: 6px;
@@ -687,6 +688,55 @@
   .vbtn svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
   .vbtn.active { color: #fff; font-weight: 700; }
   .vbtn:active svg { transform: scale(.88); }
+
+  /* Startspieler:in automatisch weiter (unter „Darstellung“): Sekunden + Haken */
+  .auto-start {
+    flex-shrink: 0; width: 100%; max-width: 360px; pointer-events: auto;
+    display: flex; align-items: center; gap: 0.5rem; padding: 0.45rem 0.5rem 0.45rem 0.8rem;
+    background: rgba(26,25,40,.72); border: 1px solid var(--border); border-radius: 14px;
+    font-family: 'DM Mono', monospace; font-size: 0.62rem; line-height: 1.3; color: var(--muted);
+  }
+  .auto-start .as-txt { flex: 1; min-width: 0; }
+  /* Sekunden: − Zahl + (kein echtes Eingabefeld – die Tastatur würde es in der App verdecken) */
+  .as-num {
+    flex-shrink: 0; display: flex; align-items: center; height: 30px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+  }
+  .as-num button {
+    width: 26px; height: 100%; padding: 0; border: none; background: none; cursor: pointer;
+    color: var(--muted); font-family: 'DM Mono', monospace; font-size: 0.95rem; line-height: 1;
+  }
+  .as-num button:active { background: var(--surface-2); color: var(--text); }
+  #autoSec { min-width: 2.3em; text-align: center; color: var(--text); font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+  #autoChk {
+    width: 30px; height: 30px; flex-shrink: 0; border-radius: 8px; cursor: pointer; padding: 0;
+    border: 1px solid var(--border-hi); background: var(--surface); color: transparent;
+    display: flex; align-items: center; justify-content: center;
+    transition: background .2s, border-color .2s, color .2s, transform .25s var(--spring);
+  }
+  #autoChk svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+  #autoChk[aria-checked="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+  #autoChk:active { transform: scale(.86); }
+  .auto-start.on .as-txt { color: var(--text); }
+
+  /* Countdown unten rechts neben der Torte (dezent, nur Zahlen) */
+  #auto-timer {
+    position: absolute; right: 10px; bottom: 6px; z-index: 5; pointer-events: none;
+    font-family: 'DM Mono', monospace; font-size: 0.72rem; color: var(--muted); opacity: 0;
+    font-variant-numeric: tabular-nums; transition: opacity .4s;
+  }
+  #auto-timer.show { opacity: .55; }
+  #auto-timer.soon { color: var(--text); }
+
+  /* Weißer Sonar-Puls übers ganze Feld, wenn die Startspieler:in automatisch weitergeht */
+  .start-sonar {
+    position: fixed; z-index: 450; pointer-events: none; border-radius: 50%;
+    width: var(--d); height: var(--d); margin: calc(var(--d) / -2) 0 0 calc(var(--d) / -2);
+    border: 3px solid rgba(255,255,255,.9);
+    box-shadow: 0 0 24px 4px rgba(255,255,255,.45), inset 0 0 36px rgba(255,255,255,.3);
+    animation: startSonar 1.4s cubic-bezier(.2, .6, .35, 1) forwards;
+  }
+  @keyframes startSonar { 0% { transform: scale(.04); opacity: 0; } 8% { opacity: 1; } 100% { transform: scale(1); opacity: 0; } }
 
   /* ===== DARSTELLUNG: BALKEN =====
      Balkendiagramm: ersetzt die Torte, Zeilen von oben nach unten nach Punkten.
@@ -1389,6 +1439,7 @@
       <div id="pie-labels"></div>
     </div>
     <div id="bar-chart" aria-label="Balkendiagramm"></div>
+    <div id="auto-timer" aria-hidden="true"></div>
   </div>
 
   <div id="input-bar">
@@ -1426,6 +1477,18 @@
         <svg viewBox="0 0 24 24" style="stroke-width:3"><path d="M4 5h16M4 10h12M4 15h8.5M4 20h5"/></svg>Balken&shy;diagramm
       </button>
     </div>
+  </div>
+  <div class="auto-start" id="autoStart">
+    <span class="as-txt" id="autoLbl">Startspieler:in automatisch nach</span>
+    <span class="as-num">
+      <button type="button" data-d="-1" aria-label="weniger Sekunden">−</button>
+      <span id="autoSec" aria-live="polite">30</span>
+      <button type="button" data-d="1" aria-label="mehr Sekunden">+</button>
+    </span>
+    <span>Sek. weiter</span>
+    <button type="button" id="autoChk" role="switch" aria-checked="false" aria-labelledby="autoLbl">
+      <svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+    </button>
   </div>
 </div>
 
@@ -2094,13 +2157,13 @@ function isCrying(i) {
 }
 
 // Startspieler:in festlegen (Mitte der Torte: die nächste; Balkendiagramm: Tipp auf den Pfeil-Streifen)
-function setStartPlayer(idx) {
+function setStartPlayer(idx, label = 'Startspieler:in') {
   startPlayerIdx = idx;
   centerFlipT0 = performance.now();
   renderPie();
   FX.kick();
   const sp = state.players[startPlayerIdx];
-  showToast(`Startspieler:in: ${sp.name}`, sp.color);
+  showToast(`${label}: ${sp.name}`, sp.color);
   saveLiveGame();
 }
 
@@ -3731,6 +3794,95 @@ $('viewSeg').addEventListener('click', e => {
 });
 syncViewSwitch();
 applyViewLayout();
+</script>
+
+<script>
+// ══════════════════════════════════════════════════════
+// STARTSPIELER:IN AUTOMATISCH WEITER
+// Schalter hinter der Tastatur (unter „Darstellung“). Ist er an, geht die Startspieler:in
+// nach x Sekunden ohne Tippen eine weiter – danach steht der Timer bis zum nächsten Tippen.
+// Countdown unten rechts neben der Torte, beim Weitergehen ein weißer Sonar-Puls.
+// ══════════════════════════════════════════════════════
+const AUTO_MIN = 5, AUTO_MAX = 300, AUTO_STEP = 5;
+const AUTO = { on: false, sec: 30, last: performance.now(), armed: true };
+try {
+  const a = JSON.parse(localStorage.getItem('flip7_autostart') || 'null');
+  if (a) { AUTO.on = !!a.on; if (a.sec >= AUTO_MIN && a.sec <= AUTO_MAX) AUTO.sec = Math.round(a.sec); }
+} catch (e) {}
+const autoSec = $('autoSec'), autoChk = $('autoChk'), autoTimer = $('auto-timer');
+function saveAuto() { try { localStorage.setItem('flip7_autostart', JSON.stringify({ on: AUTO.on, sec: AUTO.sec })); } catch (e) {} }
+function syncAuto() {
+  autoSec.textContent = AUTO.sec;
+  autoChk.setAttribute('aria-checked', AUTO.on ? 'true' : 'false');
+  $('autoStart').classList.toggle('on', AUTO.on);
+}
+function autoTouch() { AUTO.last = performance.now(); AUTO.armed = true; }
+autoChk.addEventListener('click', () => {
+  AUTO.on = !AUTO.on;
+  haptic('tap');
+  autoTouch();
+  saveAuto(); syncAuto(); autoTick();
+  showToast(AUTO.on ? `Startspieler:in geht nach ${AUTO.sec} Sek. weiter` : 'Startspieler:in automatisch: aus');
+});
+// − / +: in 5er-Schritten, gedrückt halten zählt schnell weiter
+function autoStep(d) {
+  const v = clamp(Math.round(AUTO.sec / AUTO_STEP) * AUTO_STEP + d * AUTO_STEP, AUTO_MIN, AUTO_MAX);
+  if (v === AUTO.sec) return;
+  AUTO.sec = v;
+  haptic('tick');
+  saveAuto(); syncAuto(); autoTick();
+}
+let autoRep = null;
+const autoRepStop = () => { clearTimeout(autoRep); autoRep = null; };
+document.querySelectorAll('.as-num button').forEach(b => {
+  const d = +b.dataset.d;
+  b.addEventListener('pointerdown', () => {
+    autoRepStop();
+    autoStep(d);
+    const again = delay => { autoRep = setTimeout(() => { autoStep(d); again(90); }, delay); };
+    again(450);
+  });
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach(t => b.addEventListener(t, autoRepStop));
+  b.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); autoStep(d); } });
+});
+// Jedes Tippen (und jede Eingabe über die Tastatur) startet den Timer neu
+['pointerdown', 'touchstart', 'keydown'].forEach(t => document.addEventListener(t, autoTouch, { capture: true, passive: true }));
+
+function startSonar() {
+  if (!ANIM.on) return;
+  const r = $('pie-wrap').getBoundingClientRect();
+  const x = r.left + r.width / 2, y = r.top + r.height / 2;
+  const w = window.innerWidth, h = window.innerHeight;
+  const far = Math.hypot(Math.max(x, w - x), Math.max(y, h - y));   // bis in die entfernteste Ecke
+  const el = document.createElement('div');
+  el.className = 'start-sonar';
+  el.style.left = x + 'px'; el.style.top = y + 'px';
+  el.style.setProperty('--d', Math.ceil(far * 2 + 20) + 'px');
+  document.body.appendChild(el);
+  el.addEventListener('animationend', () => el.remove());
+  setTimeout(() => el.remove(), 2000);
+}
+
+function autoTick() {
+  const running = AUTO.on && document.body.dataset.screen === 'game' && state.players.length > 1 &&
+    !document.hidden && !overlay.classList.contains('active');
+  if (!running) { autoTouch(); autoTimer.classList.remove('show', 'soon'); return; }
+  if (!AUTO.armed) { autoTimer.classList.remove('show', 'soon'); return; }   // steht bis zum nächsten Tippen
+  const left = AUTO.sec - (performance.now() - AUTO.last) / 1000;
+  if (left <= 0) {
+    AUTO.armed = false;
+    autoTimer.classList.remove('show', 'soon');
+    startSonar();
+    haptic('tap');
+    setStartPlayer((startPlayerIdx + 1) % state.players.length, 'Nächste:r Startspieler:in');
+    return;
+  }
+  autoTimer.textContent = Math.ceil(left);
+  autoTimer.classList.add('show');
+  autoTimer.classList.toggle('soon', left <= 5);
+}
+syncAuto();
+setInterval(autoTick, 250);
 </script>
 
 <script>
