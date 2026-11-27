@@ -14,7 +14,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
-<title>Flip 7 · Score v42</title>
+<title>Flip 7 · Score v43</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script>
@@ -263,6 +263,36 @@
     padding: 1px 3px; line-height: 1;
   }
   .medal-count { font-size: 0.58rem; color: var(--muted); }
+
+  /* Auswahlliste der zuletzt benutzten Namen (Schalter „Aus Liste wählen“) */
+  .names-head { display: flex; align-items: center; gap: 0.6rem; }
+  .names-head h2 { flex: 1; }
+  .pick-toggle { display: flex; align-items: center; gap: 0.45rem; cursor: pointer; user-select: none; -webkit-user-select: none;
+    font-size: 0.72rem; color: var(--muted); font-family: 'DM Mono', monospace; }
+  .pick-list { display: none; flex-direction: column; gap: 0.5rem; }
+  #setup.pick-mode .pick-list { display: flex; }
+  #setup.pick-mode #namesList { display: none; }
+  #setup.pick-mode .count-btn { visibility: hidden; }
+  .pick-row {
+    display: flex; align-items: center; gap: 0.55rem; cursor: pointer; user-select: none; -webkit-user-select: none;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 0.45rem 0.6rem;
+    transition: border-color .2s, box-shadow .2s, transform .25s var(--spring);
+  }
+  .pick-row:active { transform: scale(.97); }
+  .pick-row.on { border-color: var(--rc, var(--accent)); box-shadow: 0 0 0 2px var(--rc-a, rgba(255,107,53,.25)); }
+  .pick-row.enter { animation: rowIn .45s var(--spring) both; animation-delay: calc(var(--i, 0) * 35ms); }
+  .pick-check {
+    width: 26px; height: 26px; border-radius: 8px; flex-shrink: 0; border: 2px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'DM Mono', monospace; font-size: 0.8rem; font-weight: 700; color: #fff;
+    transition: background .2s, border-color .2s;
+  }
+  .pick-row.on .pick-check { background: var(--rc, var(--accent)); border-color: var(--rc, var(--accent)); }
+  .pick-row.on .pick-check.pop { animation: swatchPop .45s var(--spring); }
+  .pick-name { flex: 1; min-width: 0; font-weight: 700; font-size: 0.9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pick-dot { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; background: var(--rc); box-shadow: 0 0 10px -2px var(--rc); }
+  .pick-empty { color: var(--muted); font-size: 0.78rem; font-family: 'DM Mono', monospace; text-align: center; padding: 0.6rem 0; }
+  .pick-list.need .pick-row:not(.on) { animation: shakeX .35s ease-in-out; }
 
   /* Optionen-Zeilen (Punkteziel / Animationen) */
   .mode-row {
@@ -1304,8 +1334,15 @@
         <div id="playerCount">3</div>
         <button class="count-btn" id="incBtn">+</button>
       </div>
-      <h2>Namen</h2>
+      <div class="names-head">
+        <h2>Namen</h2>
+        <label class="pick-toggle" for="pickMode">
+          <span>Aus Liste wählen</span>
+          <input type="checkbox" class="switch" id="pickMode">
+        </label>
+      </div>
       <div class="names-list" id="namesList"></div>
+      <div class="pick-list" id="pickList"></div>
       <label class="mode-row" for="schnellrunde">
         <div class="mode-label">
           <strong>⚡ Punkteziel</strong>
@@ -2995,6 +3032,14 @@ function setRowColor(row, color, animate = true) {
   row.style.setProperty('--rc-a', rgba(color, 0.25));
   if (animate) retrigger(sw, 'pop');
 }
+function medalBadgeHTML(nk) {
+  const m = getMedals(nk);
+  let html = '';
+  if (m.gold)   html += `<span class="medal-chip">🥇<span class="medal-count">${m.gold > 1 ? m.gold : ''}</span></span>`;
+  if (m.silver) html += `<span class="medal-chip">🥈<span class="medal-count">${m.silver > 1 ? m.silver : ''}</span></span>`;
+  if (m.bronze) html += `<span class="medal-chip">🥉<span class="medal-count">${m.bronze > 1 ? m.bronze : ''}</span></span>`;
+  return html || '<span style="color:var(--border);font-size:0.6rem">—</span>';
+}
 const activeRows = () => [...namesListEl.querySelectorAll('.name-row:not(.leaving)')];
 
 function createNameRow(i, data) {
@@ -3028,15 +3073,7 @@ function createNameRow(i, data) {
   // Medal badge: zeigt gesammelte 🥇🥈🥉 für diesen Spielernamen
   const medalBadge = document.createElement('div');
   medalBadge.className = 'medal-badge';
-  const updateMedalBadge = () => {
-    const nk = normalizeName(inp.value.trim()) || `p${i}`;
-    const m = getMedals(nk);
-    let html = '';
-    if (m.gold)   html += `<span class="medal-chip">🥇<span class="medal-count">${m.gold > 1 ? m.gold : ''}</span></span>`;
-    if (m.silver) html += `<span class="medal-chip">🥈<span class="medal-count">${m.silver > 1 ? m.silver : ''}</span></span>`;
-    if (m.bronze) html += `<span class="medal-chip">🥉<span class="medal-count">${m.bronze > 1 ? m.bronze : ''}</span></span>`;
-    medalBadge.innerHTML = html || '<span style="color:var(--border);font-size:0.6rem">—</span>';
-  };
+  const updateMedalBadge = () => { medalBadge.innerHTML = medalBadgeHTML(normalizeName(inp.value.trim()) || `p${i}`); };
   updateMedalBadge();
   inp.addEventListener('input', () => {
     updateMedalBadge();
@@ -3064,11 +3101,122 @@ function renderNameInputs(animate = false) {
     if (animate && ANIM.on) { row.classList.add('enter'); row.style.setProperty('--i', i); }
     namesListEl.appendChild(row);
   }
+  if (PICK.on) renderPickList(false, true);
 }
+
+// ── Zuletzt benutzte Namen (für den Schalter „Aus Liste wählen“) ──
+// flip7_recent_names = JSON ["Anna","Ben",…] – neueste zuerst, höchstens 12.
+// Beim allerersten Mal aus den gespeicherten Spielen (Statistik) und den letzten Namenszeilen befüllt.
+const RECENT_KEY = 'flip7_recent_names', RECENT_MAX = 12;
+const isDefaultName = n => /^P\d+$/.test(n);   // „P3“ = Feld leer gelassen
+function dedupeNames(names) {
+  const seen = new Set(), out = [];
+  names.forEach(n => {
+    n = String(n || '').trim();
+    const nk = normalizeName(n);
+    if (!n || isDefaultName(n) || seen.has(nk)) return;
+    seen.add(nk); out.push(n);
+  });
+  return out.slice(0, RECENT_MAX);
+}
+function loadRecentNames() {
+  try { const a = JSON.parse(localStorage.getItem(RECENT_KEY)); if (Array.isArray(a)) return dedupeNames(a); } catch (e) {}
+  const seed = [];
+  for (let i = 0; i < 18; i++) seed.push(localStorage.getItem(`flip7_player_${i}`));
+  let ses = [];   // direkt lesen: loadSessions() steht erst in einem späteren <script>
+  try { ses = JSON.parse(localStorage.getItem('flip7_sessions')) || []; } catch (e) {}
+  for (let i = ses.length - 1; i >= 0; i--) (ses[i].players || []).forEach(p => seed.push(p && p.name));
+  return dedupeNames(seed);
+}
+function rememberNames(names) {
+  try { localStorage.setItem(RECENT_KEY, JSON.stringify(dedupeNames([...names, ...loadRecentNames()]))); } catch (e) {}
+}
+
+// Erstbefüllung sofort sichern, bevor das nächste Spiel die Namenszeilen überschreibt
+try { if (localStorage.getItem(RECENT_KEY) === null) localStorage.setItem(RECENT_KEY, JSON.stringify(loadRecentNames())); } catch (e) {}
+
+// ── Auswahlliste mit Häkchen statt Namen tippen ──
+// Die Auswahl schreibt die Namenszeilen (versteckt) direkt mit – Starten, Farben und
+// Reihenfolge laufen also genau wie beim Tippen. Reihenfolge = Reihenfolge der Häkchen.
+const PICK = { on: false, sel: [] };   // sel = Namen in Auswahl-Reihenfolge
+try { PICK.on = localStorage.getItem('flip7_pick_mode') === '1'; } catch (e) {}
+const pickListEl = $('pickList');
+function nameColor(name, i, used) {
+  const remembered = localStorage.getItem(`flip7_color_name_${normalizeName(name)}`);
+  if (remembered) return remembered;
+  return COLORS.find(c => !used.includes(c)) || COLORS[i % COLORS.length];
+}
+function rowsFromPick() {
+  const used = [];
+  namesListEl.innerHTML = '';
+  const n = Math.max(2, PICK.sel.length);
+  for (let i = 0; i < n; i++) {
+    const name = PICK.sel[i] || '';
+    const color = name ? nameColor(name, i, used) : COLORS[i % COLORS.length];
+    used.push(color);
+    namesListEl.appendChild(createNameRow(i, { name, color }));
+  }
+  numPlayers = n;
+  playerCountEl.textContent = PICK.sel.length;
+}
+function renderPickList(animate = false, fromRows = false) {
+  const recent = loadRecentNames();
+  const keys = recent.map(normalizeName);
+  if (fromRows) PICK.sel = activeRows().map(r => r.querySelector('.name-input').value.trim())
+    .filter(n => keys.includes(normalizeName(n)))
+    .map(n => recent[keys.indexOf(normalizeName(n))]);
+  PICK.sel = PICK.sel.filter((n, i, a) => keys.includes(normalizeName(n)) && a.indexOf(n) === i);
+  pickListEl.innerHTML = '';
+  if (!recent.length) {
+    pickListEl.innerHTML = '<div class="pick-empty">Noch keine Namen gespeichert –<br>einmal tippen und spielen, dann stehen sie hier.</div>';
+  }
+  const rowColors = {};
+  activeRows().forEach(r => { rowColors[normalizeName(r.querySelector('.name-input').value)] = r.dataset.color; });
+  recent.forEach((name, i) => {
+    const nk = normalizeName(name);
+    const pos = PICK.sel.indexOf(name);
+    const color = rowColors[nk] || localStorage.getItem(`flip7_color_name_${nk}`) || COLORS[i % COLORS.length];
+    const row = document.createElement('div');
+    row.className = 'pick-row' + (pos >= 0 ? ' on' : '');
+    row.setAttribute('role', 'checkbox');
+    row.setAttribute('aria-checked', pos >= 0);
+    row.tabIndex = 0;
+    row.style.setProperty('--rc', color);
+    row.style.setProperty('--rc-a', rgba(color, 0.25));
+    row.innerHTML = `<span class="pick-check">${pos >= 0 ? pos + 1 : ''}</span>
+      <span class="pick-name">${esc(name)}</span>
+      <span class="medal-badge">${medalBadgeHTML(nk)}</span>
+      <span class="pick-dot"></span>`;
+    if (animate && ANIM.on) { row.classList.add('enter'); row.style.setProperty('--i', i); }
+    const toggle = () => {
+      if (pos >= 0) PICK.sel.splice(pos, 1);
+      else if (PICK.sel.length < 18) PICK.sel.push(name);
+      else return;
+      rowsFromPick();
+      renderPickList();
+      if (pos < 0) retrigger(pickListEl.children[i].querySelector('.pick-check'), 'pop');
+      retrigger(playerCountEl, 'bump');
+    };
+    row.addEventListener('click', toggle);
+    row.addEventListener('keydown', e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); toggle(); } });
+    pickListEl.appendChild(row);
+  });
+  if (PICK.on) playerCountEl.textContent = PICK.sel.length;
+}
+function setPickMode(on, animate = true) {
+  PICK.on = on;
+  $('pickMode').checked = on;
+  $('setup').classList.toggle('pick-mode', on);
+  try { localStorage.setItem('flip7_pick_mode', on ? '1' : '0'); } catch (e) {}
+  if (on) renderPickList(animate, true);
+  else playerCountEl.textContent = numPlayers;   // Liste aus → die gewählten Namen stehen in den Zeilen
+}
+$('pickMode').addEventListener('change', e => setPickMode(e.target.checked));
 // Restore last player count
 const savedCount = localStorage.getItem('flip7_player_count');
 if (savedCount) { numPlayers = clamp(parseInt(savedCount, 10) || 3, 2, 18); playerCountEl.textContent = numPlayers; }
 renderNameInputs(true);
+setPickMode(PICK.on, true);
 
 // +/−: nur eine Zeile hinzufügen/entfernen (bereits getippte Namen bleiben erhalten)
 $('decBtn').onclick = () => {
@@ -3248,6 +3396,11 @@ function showGame(intro, instantSetupHide = false) {
 }
 
 $('startBtn').onclick = () => {
+  if (PICK.on && PICK.sel.length < 2) {
+    retrigger(pickListEl, 'need');
+    showToast('Mindestens 2 Spieler:innen ankreuzen');
+    return;
+  }
   const rows = activeRows();
   state.players = rows.map((row, i) => {
     const inp = row.querySelector('.name-input');
@@ -3261,6 +3414,7 @@ $('startBtn').onclick = () => {
   });
   // Also save the player count
   localStorage.setItem('flip7_player_count', state.players.length);
+  rememberNames(state.players.map(p => p.name));
   const cb = $('schnellrunde');
   const zielVal = parseInt($('zielpunkte').value, 10);
   state.schnell = cb.checked;
